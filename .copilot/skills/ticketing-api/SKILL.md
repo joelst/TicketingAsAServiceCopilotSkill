@@ -1,0 +1,61 @@
+# Ticketing API Copilot Skill
+
+## Purpose
+
+Enable conversational ticket operations against Ticketing As A Service with safe defaults for write actions.
+
+## Trigger phrases
+
+- list my open tickets
+- find urgent tickets
+- get ticket details
+- create a new ticket
+- close this ticket
+- add a ticket comment
+- show instance workflow
+
+## Tool surface
+
+- list_tickets
+- get_ticket
+- create_ticket
+- update_ticket_status
+- update_ticket
+- add_comment
+- get_instance
+- validation_write_closed_ticket_comment
+- find_my_unresolved_tickets
+- find_my_tickets_with_unread_updates
+
+## Interaction rules
+
+- Ask follow-up questions for required fields before calling a write tool.
+- Confirm user intent before update_ticket_status when moving to Resolved or Closed.
+- Confirm user intent before update_ticket when changing assignee or requestor fields.
+- Prefer get_instance to validate status values if custom workflow labels are possible.
+- Treat `status` as the primary source of ticket state.
+- Treat `resolvedStatus` as a compatibility hint for statuses that represent resolved state in custom workflows.
+- If resolution state is ambiguous, use `firstResolutionOn` and `lastResolutionOn` as supporting signals.
+- Use timezone if provided by the user; otherwise rely on connection default timezone.
+- Keep responses concise and include ticket id, title, status, priority, assignee, and last update when available.
+- For the validation action tool, prefer strict `status=Closed` matches first, then optionally fallback to resolved-compatible tickets.
+- `find_my_unresolved_tickets` returns tickets that are not resolved-compatible (`status` first, then `resolvedStatus` and resolution timestamps).
+- `find_my_tickets_with_unread_updates` returns tickets with unseen update counters for the chosen perspective.
+- For practical "my tickets" tools, use `userEmail` as the primary identity input. `assigneeEmail` is supported as a legacy alias for backward compatibility.
+
+## Safety and reliability
+
+- On 401, explain that the API key is invalid or expired.
+- On 429, suggest retry and reduce broad list queries.
+- On 404, state that the ticket id was not found in the selected region.
+- Never guess missing required identity fields for create_ticket, update_ticket, update_ticket_status, or add_comment.
+
+## Region handling
+
+Supported regions:
+
+- us: teamswork.azure-api.net
+- eu: ticketing-apim-eu.azure-api.net
+- apac: ticketing-apim-aus.azure-api.net
+
+If the user does not specify region and none is configured, ask once and cache for session context.

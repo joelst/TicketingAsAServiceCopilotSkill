@@ -1,0 +1,712 @@
+{
+  "version": "0.1.0",
+  "name": "ticketing-api-skill-tools",
+  "description": "Tool contracts for Ticketing As A Service conversational operations",
+  "tools": [
+    {
+      "name": "list_tickets",
+      "description": "List tickets with optional filtering, sorting, and pagination",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "search": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "Workflow status label. Built-in values include Open, Reopened, Started, Resolved, and Closed, but instances may define custom workflow labels. Discover the exact allowed values for the target instance with get_instance before relying on a specific label."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "Low",
+              "Medium",
+              "Important",
+              "Urgent"
+            ]
+          },
+          "isResolved": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "true",
+                  "false"
+                ]
+              }
+            ]
+          },
+          "tags": {
+            "type": "string"
+          },
+          "orderBy": {
+            "type": "string"
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "ASC",
+              "DESC"
+            ]
+          },
+          "select": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "createdAfter": {
+            "type": "string"
+          },
+          "createdBefore": {
+            "type": "string"
+          },
+          "expectedDateAfter": {
+            "type": "string"
+          },
+          "expectedDateBefore": {
+            "type": "string"
+          },
+          "lastUpdateAfter": {
+            "type": "string"
+          },
+          "lastUpdateBefore": {
+            "type": "string"
+          },
+          "continuationToken": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_ticket",
+      "description": "Get a ticket by id",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticketId"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "ticketId": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_ticket",
+      "description": "Create a new ticket",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticket",
+          "user"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "ticket": {
+            "type": "object",
+            "required": [
+              "title",
+              "requestor"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "Low",
+                  "Medium",
+                  "Important",
+                  "Urgent"
+                ]
+              },
+              "requestor": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "email"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "assignee": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "expectedDate": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tagCategoryId": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "customFields": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "email"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_ticket_status",
+      "description": "Update ticket status with optional resolution and comment",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticketId",
+          "status",
+          "user"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "ticketId": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "Target workflow status label. Built-in values include Open, Reopened, Started, Resolved, and Closed, but instances may define custom workflow labels. Discover the exact allowed values for the target instance with get_instance before attempting a status change."
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "email"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_ticket",
+      "description": "Update ticket fields such as title, assignee, priority, and custom fields",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticketId",
+          "ticket",
+          "user"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "ticketId": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "ticket": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "Low",
+                  "Medium",
+                  "Important",
+                  "Urgent"
+                ]
+              },
+              "requestor": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "assignee": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "expectedDate": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tagCategoryId": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "customFields": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "email"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "add_comment",
+      "description": "Add a comment to a ticket",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticketId",
+          "comment",
+          "user"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "ticketId": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "email"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_instance",
+      "description": "Get instance metadata including workflow and custom field details",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "validation_write_closed_ticket_comment",
+      "description": "Find a ticket by assignee and requestor, prefer Closed status, write a formatted validation comment, and verify persistence",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "assigneeEmail",
+          "requestorEmail"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "assigneeEmail": {
+            "type": "string"
+          },
+          "requestorEmail": {
+            "type": "string"
+          },
+          "allowResolvedFallback": {
+            "type": "boolean",
+            "default": true
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 200
+          },
+          "maxPages": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8
+          },
+          "stopOnFirstMatch": {
+            "type": "boolean",
+            "default": true
+          },
+          "comment": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_my_unresolved_tickets",
+      "description": "List my unresolved tickets using status as primary signal with resolved compatibility hints",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "userEmail": {
+            "type": "string"
+          },
+          "assigneeEmail": {
+            "type": "string"
+          },
+          "perspective": {
+            "type": "string",
+            "enum": [
+              "assignee",
+              "requestor",
+              "any"
+            ],
+            "default": "assignee"
+          },
+          "top": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 25
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 200
+          },
+          "maxPages": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8
+          },
+          "orderBy": {
+            "type": "string"
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "ASC",
+              "DESC"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_my_tickets_with_unread_updates",
+      "description": "List my tickets that have unread updates based on unseen event counters",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "userEmail": {
+            "type": "string"
+          },
+          "assigneeEmail": {
+            "type": "string"
+          },
+          "perspective": {
+            "type": "string",
+            "enum": [
+              "assignee",
+              "requestor",
+              "any"
+            ],
+            "default": "assignee"
+          },
+          "top": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 25
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 200
+          },
+          "maxPages": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8
+          },
+          "orderBy": {
+            "type": "string"
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "ASC",
+              "DESC"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+[
+  {
+    "id": "list-open-urgent",
+    "prompt": "Show me urgent open tickets from the US region",
+    "expectedTool": "list_tickets",
+    "mustIncludeInput": {
+      "region": "us",
+      "status": "Open",
+      "priority": "Urgent"
+    }
+  },
+  {
+    "id": "get-ticket",
+    "prompt": "Get ticket 4ac39a2a-5f80-4e06-8e79-65f1462f5a9f in EU",
+    "expectedTool": "get_ticket",
+    "mustIncludeInput": {
+      "region": "eu",
+      "ticketId": "4ac39a2a-5f80-4e06-8e79-65f1462f5a9f"
+    }
+  },
+  {
+    "id": "create-ticket-missing-user-followup",
+    "prompt": "Create a ticket in APAC with title Printer is down for Alex Wong",
+    "expectedTool": "create_ticket",
+    "expectFollowUpForMissingFields": [
+      "ticket.requestor.id",
+      "ticket.requestor.name",
+      "ticket.requestor.email",
+      "user.id",
+      "user.name",
+      "user.email"
+    ]
+  },
+  {
+    "id": "update-status-confirmation",
+    "prompt": "Close ticket 11111111-2222-3333-4444-555555555555 with resolution Fixed and comment deployed patch",
+    "expectedTool": "update_ticket_status",
+    "mustIncludeInput": {
+      "status": "Closed",
+      "resolution": "Fixed",
+      "comment": "deployed patch"
+    },
+    "requiresConfirmation": true
+  },
+  {
+    "id": "reassign-ticket",
+    "prompt": "Reassign ticket 11111111-2222-3333-4444-555555555555 to Jordan Lee in US",
+    "expectedTool": "update_ticket",
+    "mustIncludeInputShape": {
+      "ticket": [
+        "assignee"
+      ]
+    },
+    "requiresConfirmation": true
+  },
+  {
+    "id": "add-comment",
+    "prompt": "Add comment to ticket 11111111-2222-3333-4444-555555555555 saying customer confirmed the fix",
+    "expectedTool": "add_comment",
+    "mustIncludeInput": {
+      "comment": "customer confirmed the fix"
+    },
+    "requiresConfirmation": true
+  },
+  {
+    "id": "instance-status-disambiguation",
+    "prompt": "Set ticket 11111111-2222-3333-4444-555555555555 to In Review",
+    "expectedBehavior": "call_get_instance_before_update_ticket_status_when_status_not_in_default_enum"
+  },
+  {
+    "id": "rate-limit-guidance",
+    "prompt": "Pull every ticket with no limit",
+    "expectedBehavior": "prefer_limit_and_pagination_and_handle_429_with_retry"
+  },
+  {
+    "id": "resolved-state-interpretation",
+    "prompt": "Show my resolved tickets",
+    "expectedBehavior": "use_status_as_primary_signal_and_resolvedStatus_plus_resolution_timestamps_as_supporting_signals"
+  },
+  {
+    "id": "validation-action-tool",
+    "prompt": "Run the closed-ticket validation write for analyst@example.com in US",
+    "expectedTool": "validation_write_closed_ticket_comment",
+    "mustIncludeInput": {
+      "region": "us",
+      "assigneeEmail": "analyst@example.com"
+    },
+    "expectFollowUpForMissingFields": [
+      "requestorEmail"
+    ],
+    "requiresConfirmation": true
+  },
+  {
+    "id": "find-my-unresolved",
+    "prompt": "Find my unresolved tickets in US",
+    "expectedTool": "find_my_unresolved_tickets",
+    "mustIncludeInput": {
+      "region": "us",
+      "userEmail": "analyst@example.com"
+    }
+  },
+  {
+    "id": "find-my-unread-updates",
+    "prompt": "Find my tickets with unread updates in US",
+    "expectedTool": "find_my_tickets_with_unread_updates",
+    "mustIncludeInput": {
+      "region": "us",
+      "userEmail": "analyst@example.com",
+      "perspective": "assignee"
+    }
+  }
+]

@@ -1,0 +1,1137 @@
+{
+    "openapi": "3.0.1",
+    "info": {
+        "title": "Ticketing Public API",
+        "description": "REST API for Ticketing as a Service. Follows REST industry-standard practices using GET, POST, and PUT methods. Responses are in reverse chronological order. Rate limit: 100 requests per 60 seconds.",
+        "version": "1.0"
+    },
+    "servers": [
+        {
+            "url": "https://teamswork.azure-api.net/ticketing/v1",
+            "description": "Production - Global (US)"
+        },
+        {
+            "url": "https://ticketing-apim-eu.azure-api.net/ticketing/v1",
+            "description": "Production - EU (EMEA)"
+        },
+        {
+            "url": "https://ticketing-apim-aus.azure-api.net/ticketing/v1",
+            "description": "Production - APAC (AUS)"
+        }
+    ],
+    "paths": {
+        "/tickets": {
+            "get": {
+                "summary": "Get all tickets",
+                "description": "Retrieve a list of tickets in reverse chronological order. Supports filtering, sorting, field selection, and pagination via limit/offset or continuationToken.",
+                "operationId": "get-all-tickets",
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller, e.g. 7 means GMT+7.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of records to return per page. Max 1000, default 10.",
+                        "schema": { "type": "integer", "maximum": 1000, "default": 10 }
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "description": "Starting position (0-based). Default 0.",
+                        "schema": { "type": "integer", "default": 0 }
+                    },
+                    {
+                        "name": "continuationToken",
+                        "in": "header",
+                        "description": "Token from previous response to fetch the next page.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Full-text search string.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "title",
+                        "in": "query",
+                        "description": "Filter by ticket title.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filter by status.",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["Open", "Reopened", "Started", "Resolved", "Closed"]
+                        }
+                    },
+                    {
+                        "name": "statusId",
+                        "in": "query",
+                        "description": "Filter by statusId.",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["Open", "Reopened", "Started", "Resolved", "Closed"]
+                        }
+                    },
+                    {
+                        "name": "isResolved",
+                        "in": "query",
+                        "description": "Filter by resolved state.",
+                        "schema": { "type": "string", "enum": ["true", "false"] }
+                    },
+                    {
+                        "name": "priority",
+                        "in": "query",
+                        "description": "Filter by priority.",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["Low", "Medium", "Important", "Urgent"]
+                        }
+                    },
+                    {
+                        "name": "tags",
+                        "in": "query",
+                        "description": "Comma-separated tag filter in format 'tagCategoryId_tagText'.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "orderBy",
+                        "in": "query",
+                        "description": "Field to sort by.",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["status", "ticketId", "title", "requestorName", "requestorEmail", "assigneeName", "assigneeEmail", "expectedDate", "priority", "createdDateTime", "lastInteraction"]
+                        }
+                    },
+                    {
+                        "name": "order",
+                        "in": "query",
+                        "description": "Sort direction.",
+                        "schema": { "type": "string", "enum": ["ASC", "DESC"] }
+                    },
+                    {
+                        "name": "select",
+                        "in": "query",
+                        "description": "Comma-separated list of fields to return. Available: id, ticketId, title, description, status, requestor, customFields, priority, assignee, expectedDate, resolution, firstResponseOn, firstResolutionOn, lastResolutionOn, createdOn, tags, lastUpdatedOn, isFrtEscalated, isRtEscalated, createdBy, lastUpdatedBy, lastResolutionComment.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "createdAfter",
+                        "in": "query",
+                        "description": "Filter tickets created after this datetime. Format: YYYY-MM-DDTHH:mm:ss",
+                        "schema": { "type": "string", "format": "date-time", "example": "2025-09-26T00:00:00" }
+                    },
+                    {
+                        "name": "createdBefore",
+                        "in": "query",
+                        "description": "Filter tickets created before this datetime. Format: YYYY-MM-DDTHH:mm:ss",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "expectedDateAfter",
+                        "in": "query",
+                        "description": "Filter by expected date after this datetime.",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "expectedDateBefore",
+                        "in": "query",
+                        "description": "Filter by expected date before this datetime.",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "lastUpdateAfter",
+                        "in": "query",
+                        "description": "Filter tickets last updated after this datetime.",
+                        "schema": { "type": "string", "format": "date-time" }
+                    },
+                    {
+                        "name": "lastUpdateBefore",
+                        "in": "query",
+                        "description": "Filter tickets last updated before this datetime.",
+                        "schema": { "type": "string", "format": "date-time" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of tickets.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": { "$ref": "#/components/schemas/ITicket" }
+                                        },
+                                        "continuationToken": {
+                                            "type": "string",
+                                            "description": "Pass as header in next request to fetch the next page. Absent when no more pages."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Unauthorized. Invalid or missing API key." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "GET [Base URL]/tickets?key={your_API_Key}&timezone=0&orderBy=status&order=ASC&select=id,ticketId,title,description,status,requestorName&offset=0&limit=20&createdAfter=2025-09-26T00:00:00"
+            },
+            "post": {
+                "summary": "Create a ticket",
+                "description": "Create a new ticket. The requestor field is required. To trigger an email-to-ticket workflow, set all requestor fields to the requestor's email address.",
+                "operationId": "insert-ticket",
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/insertTicketRequest" },
+                            "examples": {
+                                "basic": {
+                                    "summary": "Basic ticket",
+                                    "value": {
+                                        "ticket": {
+                                            "title": "My first ticket",
+                                            "requestor": {
+                                                "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                                "name": "Jason Doe",
+                                                "email": "john.doe@teamswork.app"
+                                            }
+                                        },
+                                        "user": {
+                                            "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                            "name": "Jason Doe",
+                                            "email": "jason.doe@teamswork.app"
+                                        }
+                                    }
+                                },
+                                "with-custom-fields": {
+                                    "summary": "Ticket with custom fields, priority, assignee, and tags",
+                                    "value": {
+                                        "ticket": {
+                                            "title": "My first ticket",
+                                            "requestor": {
+                                                "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                                "name": "Jason Doe",
+                                                "email": "john.doe@teamswork.app"
+                                            },
+                                            "description": "ticket description\nline 1\nline 2",
+                                            "priority": "Urgent",
+                                            "assignee": {
+                                                "id": "708edddc-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                                "name": "Alex Wilber",
+                                                "email": "AlexW@xxxxxxxx.com"
+                                            },
+                                            "expectedDate": "2023-07-26T17:00:00Z",
+                                            "tags": [
+                                                { "tagCategoryId": "2283653a-8d36-40eb-9a68-73eb3b331811", "text": "my tag" }
+                                            ],
+                                            "customFields": {
+                                                "146db0c4-de24-4818-a131-a27161bb7ad0": [
+                                                    { "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx", "name": "Allan Deyoung", "email": "AllanD@xxxxxxxx.com" }
+                                                ],
+                                                "fef751d6-067d-431b-8a6d-667056eff6ee": ["70d42d78-899a-4d5e-8cf0-79a0e4a6b0b1"],
+                                                "4aad4ef9-3242-4bb6-87f7-29428567429f": "long text area\nbla bla bla",
+                                                "7670050a-cf1a-4d3d-8179-5eba888dea5f": "text in custom field",
+                                                "862bd88d-f691-4a7b-a89a-f6f48550fc27": true,
+                                                "5b9f56bc-ec6a-45a3-b7ce-c25e1d8cfd69": ["f72541a9-c964-4c81-bc1a-4f1f2d948416"],
+                                                "7ee98e41-c4d0-4d4c-beb9-2b7f8f8c35c8": "2023-07-26T17:00:00Z"
+                                            }
+                                        },
+                                        "user": {
+                                            "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                            "name": "Jason Doe",
+                                            "email": "jason.doe@xxxxxxxx.com"
+                                        }
+                                    }
+                                },
+                                "email-to-ticket": {
+                                    "summary": "Email-to-ticket workflow (set all requestor fields to email)",
+                                    "value": {
+                                        "ticket": {
+                                            "title": "Email to Ticket First",
+                                            "requestor": {
+                                                "id": "john.doe@contoso.com",
+                                                "name": "john.doe@contoso.com",
+                                                "email": "john.doe@contoso.com"
+                                            }
+                                        },
+                                        "user": {
+                                            "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                            "name": "Jason Doe",
+                                            "email": "jason.doe@teamswork.app"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "description": "Ticket created successfully." },
+                    "400": { "description": "Bad request. Missing or invalid parameters." },
+                    "401": { "description": "Unauthorized. Invalid or missing API key." },
+                    "500": { "description": "Internal server error." }
+                }
+            }
+        },
+        "/tickets/{ticketId}": {
+            "get": {
+                "summary": "Get a ticket",
+                "description": "Retrieve the full details of a ticket by its UUID.",
+                "operationId": "get-ticket",
+                "parameters": [
+                    {
+                        "name": "ticketId",
+                        "in": "path",
+                        "description": "UUID of the ticket.",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ticket details.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "item": { "$ref": "#/components/schemas/ITicket" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Unauthorized." },
+                    "404": { "description": "Ticket not found." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "GET [Base URL]/tickets/a261xxxx-xxxx-xxxx-xxxx-xxxxxxxx1797?key={your_API_Key}&timezone=0"
+            },
+            "put": {
+                "summary": "Update a ticket",
+                "description": "Update an existing ticket by UUID. Only include fields you want to change.",
+                "operationId": "update-ticket",
+                "parameters": [
+                    {
+                        "name": "ticketId",
+                        "in": "path",
+                        "description": "UUID of the ticket.",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/updateTicketRequest" },
+                            "example": {
+                                "ticket": {
+                                    "title": "My 2nd ticket",
+                                    "requestor": {
+                                        "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                        "name": "Jason Doe",
+                                        "email": "john.doe@wwwwww.com"
+                                    },
+                                    "priority": "Urgent",
+                                    "assignee": {
+                                        "id": "708edddc-xxxx-xxxx-xxxx-xxxxxxxxxx",
+                                        "name": "Alex Wilber",
+                                        "email": "AlexW@wwwwwww.com"
+                                    },
+                                    "customFields": {
+                                        "dcd58c80-xxxx-xxxx-xxxx-xxxxxxxxxxxxxxx": [
+                                            { "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxx", "name": "Allan Deyoung", "email": "AllanD@xxxxxxxxxxx.com" }
+                                        ]
+                                    }
+                                },
+                                "user": {
+                                    "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                    "name": "Jason Doe",
+                                    "email": "jason.doe@wwwwwww.com"
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated ticket.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "item": { "$ref": "#/components/schemas/ITicket" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Bad request." },
+                    "401": { "description": "Unauthorized." },
+                    "404": { "description": "Ticket not found." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "PUT [Base URL]/tickets/a261xxxx-xxxx-xxxx-xxxx-xxxxxxxx1797?key={your_API_Key}&timezone=0"
+            }
+        },
+        "/tickets/{ticketId}/status": {
+            "put": {
+                "summary": "Update ticket status",
+                "description": "Update the status of a ticket by UUID.",
+                "operationId": "update-ticket-status",
+                "parameters": [
+                    {
+                        "name": "ticketId",
+                        "in": "path",
+                        "description": "UUID of the ticket.",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/updateTicketStatusRequest" },
+                            "example": {
+                                "status": "Resolved",
+                                "resolution": "fixed",
+                                "comment": "Great job!",
+                                "user": {
+                                    "id": "23424-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                    "name": "Jason Doe",
+                                    "email": "jason.doe@wwww.com"
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated ticket.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "item": { "$ref": "#/components/schemas/ITicket" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Bad request." },
+                    "401": { "description": "Unauthorized." },
+                    "404": { "description": "Ticket not found." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "PUT [Base URL]/tickets/a261xxxx-xxxx-xxxx-xxxx-xxxxxxxx1797/status?key={your_API_Key}&timezone=0"
+            }
+        },
+        "/tickets/{ticketId}/activities": {
+            "get": {
+                "summary": "Get ticket activities",
+                "description": "Retrieve all activities (status changes and comments) associated with a ticket.",
+                "operationId": "get-ticket-activities",
+                "parameters": [
+                    {
+                        "name": "ticketId",
+                        "in": "path",
+                        "description": "UUID of the ticket.",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of activities.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": { "$ref": "#/components/schemas/IActivity" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Unauthorized." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "GET [Base URL]/tickets/a261xxxx-xxxx-xxxx-xxxx-xxxxxxxx1797/activities?key={your_API_Key}&timezone=0"
+            },
+            "post": {
+                "summary": "Add a comment to a ticket",
+                "description": "Add a new comment to a ticket.",
+                "operationId": "insert-comment",
+                "parameters": [
+                    {
+                        "name": "ticketId",
+                        "in": "path",
+                        "description": "UUID of the ticket.",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/insertCommentRequest" },
+                            "example": {
+                                "comment": "comment from API",
+                                "user": {
+                                    "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                    "name": "Jason Doe",
+                                    "email": "jason.doe@wwwwww.com"
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Comment created.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "item": { "$ref": "#/components/schemas/IComment" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Bad request." },
+                    "401": { "description": "Unauthorized." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "POST [Base URL]/tickets/a261xxxx-xxxx-xxxx-xxxx-xxxxxxxx1797/activities?key={your_API_Key}&timezone=0"
+            }
+        },
+        "/tickets/{ticketId}/attachments": {
+            "get": {
+                "summary": "Get ticket attachments",
+                "description": "Get list of attachments associated with a specific ticket.",
+                "operationId": "get-ticket-attachments",
+                "parameters": [
+                    {
+                        "name": "ticketId",
+                        "in": "path",
+                        "description": "UUID of the ticket.",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of attachments.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": { "$ref": "#/components/schemas/IAttachment" }
+                                        },
+                                        "message": { "type": "string" },
+                                        "error": { "type": "boolean" }
+                                    }
+                                },
+                                "example": {
+                                    "items": [
+                                        {
+                                            "id": "1234567890123456",
+                                            "caption": "1234567890123456-sample_image.png",
+                                            "createdDateTime": "2025-01-09T08:00:00.000Z",
+                                            "createdBy": "Jason Doe",
+                                            "src": "https://exampleblobstorage.blob.core.windows.net/sample/1234567890123456-sample_image.png",
+                                            "isArchive": false
+                                        }
+                                    ],
+                                    "message": "Successfully executed request",
+                                    "error": false
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Unauthorized." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "GET [Base URL]/tickets/{ticketId}/attachments?key={your_API_Key}&timezone=0"
+            },
+            "post": {
+                "summary": "Add link attachments to a ticket",
+                "description": "Add one or more hyperlink attachments to a ticket. For file uploads use multipart/form-data. The response contains item.activityId — use this value with GET /tickets/activity/{activityId}/attachments to retrieve the attachments for this activity.",
+                "operationId": "insert-ticket-attachments",
+                "parameters": [
+                    {
+                        "name": "ticketId",
+                        "in": "path",
+                        "description": "UUID of the ticket.",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/insertAttachmentLinkRequest" },
+                            "example": {
+                                "comment": "This is a sample comment for testing purposes.",
+                                "isPrivate": false,
+                                "attachments": [
+                                    { "caption": "Example Site 1", "src": "https://www.example1.com" },
+                                    { "caption": "Example Site 2", "src": "https://www.example2.com" }
+                                ],
+                                "user": {
+                                    "id": "053660b7-xxxx-xxxx-xxxx-xxxxxxxxxxx",
+                                    "name": "Jason Doe",
+                                    "email": "jason.doe@teamswork.app"
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Attachments added.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "item": { "$ref": "#/components/schemas/IAttachmentActivityResponse" },
+                                        "error": { "type": "boolean" },
+                                        "message": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Bad request." },
+                    "401": { "description": "Unauthorized." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "POST [Base URL]/tickets/{ticketId}/attachments?key={your_API_Key}&timezone=0"
+            }
+        },
+        "/tickets/activity/{activityId}/attachments": {
+            "get": {
+                "summary": "Get activity attachments",
+                "description": "Get list of attachments linked to a specific attachment activity. IMPORTANT: the activityId must be the value of item.activityId from the POST /tickets/{ticketId}/attachments response. Activity IDs from GET /tickets/{ticketId}/activities are not valid here — only attachment activities are supported, and passing a non-attachment activity ID will result in a 500 Internal error.",
+                "operationId": "get-activity-attachments",
+                "parameters": [
+                    {
+                        "name": "activityId",
+                        "in": "path",
+                        "description": "ID of the attachment activity. Must come from item.activityId in the POST /tickets/{ticketId}/attachments response.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of attachments.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": { "$ref": "#/components/schemas/IAttachment" }
+                                        },
+                                        "message": { "type": "string" },
+                                        "error": { "type": "boolean" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Unauthorized." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "GET [Base URL]/tickets/activity/{activityId}/attachments?key={your_API_Key}&timezone=0"
+            }
+        },
+        "/instance": {
+            "get": {
+                "summary": "Get instance details",
+                "description": "Retrieve instance details including custom fields definitions and assignee list. Use this to discover available custom field IDs before creating or updating tickets.",
+                "operationId": "get-instance",
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "description": "Timezone offset of the caller.",
+                        "required": true,
+                        "schema": { "type": "integer" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Instance details.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "item": { "$ref": "#/components/schemas/IInstance" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Unauthorized." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "GET [Base URL]/instance?key={your_API_Key}&timezone=0"
+            }
+        },
+        "/tags": {
+            "get": {
+                "summary": "Get tag categories",
+                "description": "Retrieve all tag categories and their tags.",
+                "operationId": "get-tag-categories",
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API key for authentication.",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of tag categories.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": { "$ref": "#/components/schemas/ITagCategory" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Unauthorized." },
+                    "500": { "description": "Internal server error." }
+                },
+                "x-example": "GET [Base URL]/tags?key={your_API_Key}&timezone=0"
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "apiKeyHeader": {
+                "type": "apiKey",
+                "name": "Ocp-Apim-Subscription-Key",
+                "in": "header",
+                "description": "Primary or secondary API key from the Ticketing App settings."
+            },
+            "apiKeyQuery": {
+                "type": "apiKey",
+                "name": "key",
+                "in": "query",
+                "description": "API key passed as query parameter. Example: ?key={your_API_Key}&timezone=7"
+            }
+        },
+        "schemas": {
+            "IUser": {
+                "type": "object",
+                "description": "Represents a user (requestor, assignee, or acting user). For Microsoft 365 users, use the Azure Object ID, Display Name, and Email.",
+                "properties": {
+                    "id": { "type": "string", "description": "Azure Object ID or email (for email-to-ticket)." },
+                    "name": { "type": "string", "description": "Display name." },
+                    "email": { "type": "string", "description": "Email address." }
+                },
+                "required": ["id", "name", "email"]
+            },
+            "IPriority": {
+                "type": "string",
+                "enum": ["Low", "Medium", "Important", "Urgent"]
+            },
+            "IStatus": {
+                "type": "string",
+                "enum": ["Open", "Reopened", "Started", "Resolved", "Closed"]
+            },
+            "IResolution": {
+                "type": "string",
+                "enum": ["fixed", "cannotResolve", "cancelled"]
+            },
+            "ITicketTag": {
+                "type": "object",
+                "properties": {
+                    "tagCategoryId": { "type": "string", "description": "ID of the tag category." },
+                    "text": { "type": "string", "description": "Tag text value." }
+                },
+                "required": ["tagCategoryId", "text"],
+                "additionalProperties": false
+            },
+            "ITicket": {
+                "type": "object",
+                "description": "A ticket object. Used both for write requests (create/update) and read responses. Custom field IDs can be found via GET /instance.",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid", "description": "Internal UUID of the ticket. Present in responses." },
+                    "ticketNo": { "type": "integer", "description": "Human-readable ticket number (e.g. 1839). Present in responses." },
+                    "title": { "type": "string" },
+                    "status": { "$ref": "#/components/schemas/IStatus", "description": "Present in responses." },
+                    "requestor": { "$ref": "#/components/schemas/IUser" },
+                    "assignee": { "$ref": "#/components/schemas/IUser" },
+                    "description": { "type": "string", "description": "Ticket description. Supports HTML formatting — use <p> for paragraphs, <br> for line breaks, <strong> for bold, <u> for underline. Example: <p><strong>Summary</strong></p><p>Line 1<br>Line 2</p>" },
+                    "priority": { "$ref": "#/components/schemas/IPriority" },
+                    "expectedDate": { "type": "string", "format": "date", "description": "Date only, format YYYY-MM-DD (e.g. 2026-04-01). IMPORTANT: using a datetime format (e.g. 2026-04-01T17:00:00Z) when customFields is also present causes a silent validation failure — the ticket is not created and no error message is returned." },
+                    "tags": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/ITicketTag" }
+                    },
+                    "customFields": {
+                        "type": "object",
+                        "description": "Key-value pairs where key is the 36-character custom field ID. Value type depends on field type: string (text/date), boolean (toggle), array of strings (item picker), array of IUser (people picker)."
+                    },
+                    "createdOn": { "type": "string", "format": "date-time", "description": "Creation datetime. Present in responses." },
+                    "lastUpdatedOn": { "type": "string", "format": "date-time", "description": "Last update datetime. Present in responses." },
+                    "createdBy": { "$ref": "#/components/schemas/IUser", "description": "Present in responses." },
+                    "lastUpdatedBy": { "$ref": "#/components/schemas/IUser", "description": "Present in responses." },
+                    "resolvedStatus": { "type": "string", "description": "Resolution type if resolved. Present in responses." },
+                    "firstResponseOn": { "type": "string", "format": "date-time", "description": "Present in responses." }
+                }
+            },
+            "IAttachmentActivityResponse": {
+                "type": "object",
+                "description": "Response body from POST /tickets/{ticketId}/attachments. Contains activityId which must be used with GET /tickets/activity/{activityId}/attachments.",
+                "properties": {
+                    "activityId": { "type": "string", "format": "uuid", "description": "ID of the created attachment activity. Use this with GET /tickets/activity/{activityId}/attachments." },
+                    "comment": { "type": "string" },
+                    "ticketId": { "type": "string", "format": "uuid" },
+                    "attachments": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/IAttachment" }
+                    },
+                    "user": { "$ref": "#/components/schemas/IUser" }
+                }
+            },
+            "IActivity": {
+                "type": "object",
+                "description": "An activity on a ticket — either a status change or a comment.",
+                "properties": {
+                    "id": { "type": "string" },
+                    "ticketId": { "type": "string" },
+                    "comment": { "type": "string" },
+                    "isPrivate": { "type": "boolean" },
+                    "createdDateTime": { "type": "string", "format": "date-time" },
+                    "createdBy": { "$ref": "#/components/schemas/IUser" }
+                }
+            },
+            "IComment": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "ticketId": { "type": "string" },
+                    "comment": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/IUser" }
+                }
+            },
+            "IAttachment": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "caption": { "type": "string" },
+                    "createdDateTime": { "type": "string", "format": "date-time" },
+                    "createdBy": { "type": "string" },
+                    "src": { "type": "string", "format": "uri" },
+                    "isArchive": { "type": "boolean" },
+                    "isHyperlink": { "type": "boolean" },
+                    "isImage": { "type": "boolean" },
+                    "filename": { "type": "string" }
+                }
+            },
+            "IAttachmentLink": {
+                "type": "object",
+                "properties": {
+                    "src": { "type": "string", "format": "uri", "description": "URL of the link." },
+                    "caption": { "type": "string", "description": "Display name for the link." }
+                },
+                "required": ["src", "caption"]
+            },
+            "ITagCategory": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "instanceId": { "type": "string" },
+                    "text": { "type": "string" },
+                    "color": { "type": "string" },
+                    "tags": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/ITag" }
+                    },
+                    "deleted": { "type": "boolean" }
+                }
+            },
+            "ITag": {
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" },
+                    "deleted": { "type": "boolean" }
+                }
+            },
+            "ICustomField": {
+                "type": "object",
+                "description": "Custom field definition as returned by GET /instance.",
+                "properties": {
+                    "id": { "type": "string", "description": "36-character UUID used as the key in ticket customFields." },
+                    "type": { "type": "string", "description": "Field type: text, textarea, toggle, datepicker, peoplepicker, itempicker." },
+                    "label": { "type": "string" }
+                }
+            },
+            "IInstance": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "groupId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "enabled": { "type": "boolean" },
+                    "tenantId": { "type": "string" },
+                    "teamId": { "type": "string" },
+                    "channelId": { "type": "string" },
+                    "subscriptionId": { "type": "string" },
+                    "mailAddress": { "type": "string" },
+                    "customFields": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/ICustomField" }
+                    },
+                    "customFieldsLeft": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/ICustomField" }
+                    },
+                    "customFieldsRight": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/ICustomField" }
+                    },
+                    "assignees": {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "enum": ["teamsOwner", "customAssignee"] },
+                            "peoples": { "type": "array", "items": { "$ref": "#/components/schemas/IUser" } }
+                        }
+                    },
+                    "isAutomaticAssignTickets": { "type": "boolean" },
+                    "isAutoAssignIdleTickets": { "type": "boolean" },
+                    "dayBeforeTicketsIdle": { "type": "integer" }
+                }
+            },
+            "insertTicketRequest": {
+                "type": "object",
+                "properties": {
+                    "ticket": {
+                        "allOf": [
+                            { "$ref": "#/components/schemas/ITicket" },
+                            {
+                                "required": ["title", "requestor"]
+                            }
+                        ]
+                    },
+                    "user": { "$ref": "#/components/schemas/IUser" }
+                },
+                "required": ["ticket", "user"]
+            },
+            "updateTicketRequest": {
+                "type": "object",
+                "properties": {
+                    "ticket": { "$ref": "#/components/schemas/ITicket" },
+                    "user": { "$ref": "#/components/schemas/IUser" }
+                },
+                "required": ["ticket", "user"]
+            },
+            "updateTicketStatusRequest": {
+                "type": "object",
+                "properties": {
+                    "status": { "$ref": "#/components/schemas/IStatus" },
+                    "resolution": { "$ref": "#/components/schemas/IResolution" },
+                    "comment": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/IUser" }
+                },
+                "required": ["status", "user"]
+            },
+            "insertCommentRequest": {
+                "type": "object",
+                "properties": {
+                    "comment": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/IUser" }
+                },
+                "required": ["comment", "user"]
+            },
+            "insertAttachmentLinkRequest": {
+                "type": "object",
+                "properties": {
+                    "comment": { "type": "string" },
+                    "attachments": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/IAttachmentLink" }
+                    },
+                    "user": { "$ref": "#/components/schemas/IUser" },
+                    "isPrivate": { "type": "boolean", "default": false }
+                },
+                "required": ["comment", "attachments", "user", "isPrivate"]
+            }
+        }
+    },
+    "security": [
+        { "apiKeyHeader": [] },
+        { "apiKeyQuery": [] }
+    ]
+}

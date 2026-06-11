@@ -1,0 +1,10 @@
+node_modules/
+*.log
+*.tmp
+.DS_Store
+.env
+.vscode/
+temp/
+*.swagger-downloaded.json
+.publish-connectors.defaults.json
+docs/ticketing-api.openapi.json

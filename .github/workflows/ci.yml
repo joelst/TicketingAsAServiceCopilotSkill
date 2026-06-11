@@ -1,0 +1,136 @@
+name: Skill CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - "18"
+          - "22"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Validate ESM configuration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'package.json')) {
+            throw 'Missing package.json. This repo requires package.json with "type": "module" for ESM syntax checks.'
+          }
+
+          $package = Get-Content -Raw -Path 'package.json' | ConvertFrom-Json
+          if ($package.type -ne 'module') {
+            throw 'package.json must set "type": "module" so node --check parses .js files as ESM.'
+          }
+
+      - name: Validate JavaScript syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $jsFiles = @(
+            '.copilot/skills/ticketing-api/starter/adapter.js',
+            '.copilot/skills/ticketing-api/starter/dispatcher.js',
+            '.copilot/skills/ticketing-api/starter/dispatcher-dryrun.mjs',
+            '.copilot/skills/ticketing-api/starter/dispatcher-practical-tools-run.mjs',
+            '.copilot/skills/ticketing-api/starter/dispatcher-validation-run.mjs'
+          )
+          foreach ($file in $jsFiles) {
+            if (-not (Test-Path $file)) {
+              throw "Expected JavaScript file is missing: $file"
+            }
+            node --check $file
+            if ($LASTEXITCODE -ne 0) {
+              throw "Syntax check failed: $file"
+            }
+          }
+
+      - name: Run automated adapter reliability tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testFile = '.copilot/skills/ticketing-api/starter/adapter.test.mjs'
+          if (-not (Test-Path $testFile)) {
+            throw "Expected test file is missing: $testFile"
+          }
+
+          node --test $testFile
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Adapter reliability tests failed.'
+          }
+
+      - name: Run automated dispatcher safety tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testFile = '.copilot/skills/ticketing-api/starter/dispatcher.test.mjs'
+          if (-not (Test-Path $testFile)) {
+            throw "Expected test file is missing: $testFile"
+          }
+
+          node --test $testFile
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Dispatcher safety tests failed.'
+          }
+
+      - name: Validate JSON files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $jsonFiles = @(
+            '.copilot/skills/ticketing-api/tool-schema.json',
+            '.copilot/skills/ticketing-api/evals/cases.json'
+          )
+          foreach ($file in $jsonFiles) {
+            $content = Get-Content -Raw -Path $file
+            $null = $content | ConvertFrom-Json
+          }
+
+      - name: Cache PowerShell modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/powershell/Modules
+          key: ${{ runner.os }}-pwsh-modules-psscriptanalyzer-1.21.0
+
+      - name: Validate PowerShell scripts with PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $requiredVersion = [Version]'1.21.0'
+          $available = Get-Module -ListAvailable -Name PSScriptAnalyzer | Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $available -or $available.Version -ne $requiredVersion) {
+            Install-Module PSScriptAnalyzer -Scope CurrentUser -Repository PSGallery -RequiredVersion $requiredVersion.ToString() -Force
+          }
+
+          Import-Module PSScriptAnalyzer -RequiredVersion $requiredVersion.ToString() -Force
+
+          $ps1Files = Get-ChildItem -Path '.copilot/skills/ticketing-api/starter' -Filter '*.ps1' -File
+          if ($ps1Files.Count -eq 0) {
+            Write-Output 'No PowerShell files found.'
+            exit 0
+          }
+
+          $results = @()
+          foreach ($file in $ps1Files) {
+            $results += Invoke-ScriptAnalyzer -Path $file.FullName
+          }
+
+          if ($results.Count -gt 0) {
+            $results | Select-Object RuleName, Severity, ScriptName, Line, Message | Format-Table -AutoSize
+            throw 'PSScriptAnalyzer found issues.'
+          }
