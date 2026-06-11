@@ -146,12 +146,14 @@
             "description": "Response verbosity. summary returns concise ticket fields; full includes embedded activity details."
           },
           "continuationToken": {
-            "type": "string"
+            "type": "string",
+            "description": "Activity-page continuation token for embedded activities when mode=full. Does not page the ticket resource."
           },
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000
+            "maximum": 1000,
+            "description": "Maximum number of embedded activity records to fetch when mode=full. Does not limit ticket retrieval."
           }
         },
         "additionalProperties": false

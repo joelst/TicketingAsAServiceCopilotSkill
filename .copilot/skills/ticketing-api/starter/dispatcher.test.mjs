@@ -428,27 +428,31 @@ test('get_ticket full mode leaves unknown ticket activityCount as null', async (
 
 test('validation action uses strict Closed match before resolved-compatible fallback', async () => {
   let addCommentCalls = 0;
+  let listTicketsInput = null;
   const adapter = createAdapterStub({
-    listTickets: async () => ({
-      data: {
-        items: [
-          {
-            id: 'resolved-ticket',
-            status: 'In Progress',
-            resolvedStatus: ['In Progress'],
-            requestor: { email: 'requestor@example.com' },
-            assignee: { id: 'a1', name: 'Assignee', email: 'assignee@example.com' }
-          },
-          {
-            id: 'closed-ticket',
-            status: 'Closed',
-            requestor: { email: 'requestor@example.com' },
-            assignee: { id: 'a2', name: 'Assignee', email: 'assignee@example.com' }
-          }
-        ]
-      },
-      meta: { statusCode: 200 }
-    }),
+    listTickets: async (input) => {
+      listTicketsInput = input;
+      return {
+        data: {
+          items: [
+            {
+              id: 'resolved-ticket',
+              status: 'In Progress',
+              resolvedStatus: ['In Progress'],
+              requestor: { email: 'requestor@example.com' },
+              assignee: { id: 'a1', name: 'Assignee', email: 'assignee@example.com' }
+            },
+            {
+              id: 'closed-ticket',
+              status: 'Closed',
+              requestor: { email: 'requestor@example.com' },
+              assignee: { id: 'a2', name: 'Assignee', email: 'assignee@example.com' }
+            }
+          ]
+        },
+        meta: { statusCode: 200 }
+      };
+    },
     addComment: async (input) => {
       addCommentCalls += 1;
       return { data: { message: `commented:${input.ticketId}` }, meta: { statusCode: 200 } };
@@ -466,6 +470,10 @@ test('validation action uses strict Closed match before resolved-compatible fall
 
   assert.equal(addCommentCalls, 1);
   assert.equal(result.data.targetTicketId, 'closed-ticket');
+  assert.equal(
+    listTicketsInput.select,
+    'id,ticketNo,title,priority,status,requestor,assignee,firstResolutionOn,lastResolutionOn'
+  );
 });
 
 test('validation action fallback can be disabled and then throws when no Closed ticket exists', async () => {
@@ -553,8 +561,10 @@ test('validation action honors stopOnFirstMatch=false and continues paging after
 
 test('practical tools filter by perspective, unseen counters, top clipping, and pagination', async () => {
   let page = 0;
+  const listSelects = [];
   const adapter = createAdapterStub({
-    listTickets: async () => {
+    listTickets: async (input) => {
+      listSelects.push(input.select);
       page += 1;
       if (page === 1) {
         return {
@@ -634,4 +644,5 @@ test('practical tools filter by perspective, unseen counters, top clipping, and 
   assert.equal(unreadRequestor.data.items[0].requestor.email, 'user@example.com');
   assert.equal(unreadRequestor.data.items[0].unseenUpdates.assignee, 0);
   assert.equal(unreadRequestor.data.items[0].unseenUpdates.requestor, 4);
+  assert.ok(listSelects.every((select) => !String(select || '').includes('resolvedStatus')));
 });

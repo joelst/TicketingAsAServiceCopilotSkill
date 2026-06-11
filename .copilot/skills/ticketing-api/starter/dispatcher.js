@@ -9,7 +9,8 @@ const WRITE_TOOLS = new Set([
 ]);
 
 const LIST_TICKET_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,createdOn,lastUpdatedOn,lastInteraction,tags';
-const MY_TICKETS_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,createdOn,lastUpdatedOn,lastInteraction,resolvedStatus,firstResolutionOn,lastResolutionOn,assigneeUnseenEventCnt,requestorUnseenEventCnt,tags';
+const MY_TICKETS_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,createdOn,lastUpdatedOn,lastInteraction,firstResolutionOn,lastResolutionOn,assigneeUnseenEventCnt,requestorUnseenEventCnt,tags';
+const VALIDATION_TICKET_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,firstResolutionOn,lastResolutionOn';
 
 function parseTimezoneOffsetMinutes (timezone) {
   if (typeof timezone === 'number' && Number.isFinite(timezone)) {
@@ -377,6 +378,7 @@ async function listCandidateTickets (adapter, input) {
       region: input.region,
       timezone: input.timezone,
       limit,
+      select: VALIDATION_TICKET_SELECT_FIELDS,
       orderBy: 'lastInteraction',
       order: 'DESC',
       continuationToken
