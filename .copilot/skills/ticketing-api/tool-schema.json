@@ -20,6 +20,15 @@
           "timezone": {
             "type": "string"
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "default": "summary",
+            "description": "Response verbosity for read output. Use summary by default; use full for full-fidelity payloads."
+          },
           "search": {
             "type": "string"
           },
@@ -126,6 +135,68 @@
           },
           "timezone": {
             "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "default": "summary",
+            "description": "Response verbosity. summary returns concise ticket fields; full includes embedded activity details."
+          },
+          "continuationToken": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_ticket_activities",
+      "description": "Get ticket activities with continuation token pagination and summary/full output modes",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticketId"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "ticketId": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "default": "summary",
+            "description": "Response verbosity for activity output. summary returns compact activity records; full returns full-fidelity activity fields."
+          },
+          "continuationToken": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
           }
         },
         "additionalProperties": false

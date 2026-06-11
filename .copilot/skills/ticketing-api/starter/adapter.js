@@ -121,6 +121,62 @@ async function parseJsonSafe (response) {
   }
 }
 
+function normalizeSingleItemPayload (payload) {
+  if (!payload || typeof payload !== 'object') {
+    return {};
+  }
+
+  if (payload.item && typeof payload.item === 'object') {
+    return payload.item;
+  }
+
+  if (payload.ticket && typeof payload.ticket === 'object') {
+    return payload.ticket;
+  }
+
+  return payload;
+}
+
+function normalizeCollectionPayload (payload) {
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      itemCount: payload.length,
+      continuationToken: undefined
+    };
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return {
+      items: [],
+      itemCount: 0,
+      continuationToken: undefined
+    };
+  }
+
+  if (Array.isArray(payload.items)) {
+    return {
+      items: payload.items,
+      itemCount: Number.isFinite(Number(payload.itemCount)) ? Number(payload.itemCount) : payload.items.length,
+      continuationToken: payload.continuationToken
+    };
+  }
+
+  if (payload.item && typeof payload.item === 'object') {
+    return {
+      items: [payload.item],
+      itemCount: 1,
+      continuationToken: payload.continuationToken
+    };
+  }
+
+  return {
+    items: [],
+    itemCount: Number.isFinite(Number(payload.itemCount)) ? Number(payload.itemCount) : 0,
+    continuationToken: payload.continuationToken
+  };
+}
+
 export class TicketingApiAdapter {
   constructor(config) {
     if (!config || !config.apiKey) {
@@ -276,6 +332,21 @@ export class TicketingApiAdapter {
       path: '/tickets',
       query,
       headers
+    }).then((response) => {
+      const normalized = normalizeCollectionPayload(response.data);
+      const token = response.meta.continuationToken || normalized.continuationToken;
+
+      return {
+        data: {
+          items: normalized.items,
+          itemCount: normalized.itemCount,
+          continuationToken: token || null
+        },
+        meta: {
+          ...response.meta,
+          continuationToken: token || null
+        }
+      };
     });
   }
 
@@ -287,6 +358,44 @@ export class TicketingApiAdapter {
       query: {
         timezone: input.timezone
       }
+    }).then((response) => ({
+      data: {
+        ticket: normalizeSingleItemPayload(response.data)
+      },
+      meta: response.meta
+    }));
+  }
+
+  getTicketActivities (input) {
+    const headers = {};
+    if (input.continuationToken) {
+      headers.continuationToken = input.continuationToken;
+    }
+
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: `/tickets/${encodeURIComponent(input.ticketId)}/activities`,
+      query: {
+        timezone: input.timezone,
+        limit: input.limit
+      },
+      headers
+    }).then((response) => {
+      const normalized = normalizeCollectionPayload(response.data);
+      const token = response.meta.continuationToken || normalized.continuationToken;
+
+      return {
+        data: {
+          items: normalized.items,
+          itemCount: normalized.itemCount,
+          continuationToken: token || null
+        },
+        meta: {
+          ...response.meta,
+          continuationToken: token || null
+        }
+      };
     });
   }
 

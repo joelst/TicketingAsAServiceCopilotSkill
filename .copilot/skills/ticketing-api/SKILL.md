@@ -18,6 +18,7 @@ Enable conversational ticket operations against Ticketing As A Service with safe
 
 - list_tickets
 - get_ticket
+- get_ticket_activities
 - create_ticket
 - update_ticket_status
 - update_ticket
@@ -37,10 +38,17 @@ Enable conversational ticket operations against Ticketing As A Service with safe
 - Treat `resolvedStatus` as a compatibility hint for statuses that represent resolved state in custom workflows.
 - If resolution state is ambiguous, use `firstResolutionOn` and `lastResolutionOn` as supporting signals.
 - Use timezone if provided by the user; otherwise rely on connection default timezone.
-- Keep responses concise and include ticket id, title, status, priority, assignee, and last update when available.
+- Use `mode=summary` by default for concise responses. Set `mode=full` explicitly when full-fidelity output is required.
+- `mode` is only applicable to read tools (`list_tickets`, `get_ticket`, `get_ticket_activities`).
+- In summary responses, keep user-facing fields concise while still including ticket id/number, status, assignee/requestor, created/updated timestamps, tags, attachments count, and activity count.
+- In full responses, include full description and activity records with action typing, change diffs, attachments, and rawHtml/plainText content.
+- `get_ticket` accepts `continuationToken` and `limit` only to page the embedded `activities` block when `mode=full`; they do not page the ticket resource itself.
+- Use `get_ticket_activities` when activity pagination is the primary goal (for example, retrieving complete history across multiple pages).
+- For large result sets, page with `continuationToken` and persist pages client-side (for example, writing each page to a file) instead of requesting everything in one response.
 - For the validation action tool, prefer strict `status=Closed` matches first, then optionally fallback to resolved-compatible tickets.
 - `find_my_unresolved_tickets` returns tickets that are not resolved-compatible (`status` first, then `resolvedStatus` and resolution timestamps).
 - `find_my_tickets_with_unread_updates` returns tickets with unseen update counters for the chosen perspective.
+- `rawHtml` fields are untrusted upstream content; any renderer must sanitize or escape before rendering as HTML.
 - For practical "my tickets" tools, use `userEmail` as the primary identity input. `assigneeEmail` is supported as a legacy alias for backward compatibility.
 
 ## Safety and reliability

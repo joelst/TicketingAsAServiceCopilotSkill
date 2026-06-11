@@ -5,7 +5,8 @@ import { createToolDispatcher } from './dispatcher.js';
 function createAdapterStub (overrides = {}) {
   return {
     listTickets: async () => ({ data: { items: [] }, meta: { statusCode: 200 } }),
-    getTicket: async () => ({ data: {}, meta: { statusCode: 200 } }),
+    getTicket: async () => ({ data: { ticket: {} }, meta: { statusCode: 200 } }),
+    getTicketActivities: async () => ({ data: { items: [], itemCount: 0, continuationToken: null }, meta: { statusCode: 200, continuationToken: null } }),
     createTicket: async () => ({ data: {}, meta: { statusCode: 200 } }),
     updateTicket: async () => ({ data: {}, meta: { statusCode: 200 } }),
     updateTicketStatus: async () => ({ data: {}, meta: { statusCode: 200 } }),
@@ -118,6 +119,311 @@ test('read operation bypasses confirmation gate', async () => {
 
   assert.equal(called, 0);
   assert.deepEqual(result.data.items, []);
+});
+
+test('list_tickets normalizes lastInteraction to requested timezone offset when provided', async () => {
+  const adapter = createAdapterStub({
+    listTickets: async () => ({
+      data: {
+        itemCount: 1,
+        items: [
+          {
+            ticketNo: 'INC-1001',
+            title: 'Printer issue',
+            status: 'Open',
+            priority: 'Medium',
+            requestor: { name: 'Jane Requestor' },
+            assignee: { name: 'Alex Assignee' },
+            lastInteraction: '2026-06-11T04:00:00.000Z',
+            attachments: []
+          }
+        ]
+      },
+      meta: { statusCode: 200 }
+    })
+  });
+
+  const dispatch = createToolDispatcher({
+    apiKey: 'test-key',
+    defaultRegion: 'us',
+    adapter
+  });
+
+  const result = await dispatch('list_tickets', { region: 'us', timezone: '-5' });
+  assert.equal(result.data.itemCount, 1);
+  assert.equal(result.data.items[0].ticketNo, 'INC-1001');
+  assert.equal(result.data.items[0].lastInteraction, '2026-06-10T23:00:00.000-05:00');
+  assert.equal(result.data.items[0].requestor.name, 'Jane Requestor');
+  assert.equal(result.data.items[0].attachmentsCount, 0);
+});
+
+test('list_tickets normalizes explicit-offset timestamps to requested timezone', async () => {
+  const adapter = createAdapterStub({
+    listTickets: async () => ({
+      data: {
+        itemCount: 1,
+        items: [
+          {
+            ticketNo: 'INC-1001-OFFSET',
+            title: 'Offset timestamp ticket',
+            status: 'Open',
+            lastInteraction: '2026-06-11T04:00:00+02:00'
+          }
+        ]
+      },
+      meta: { statusCode: 200 }
+    })
+  });
+
+  const dispatch = createToolDispatcher({
+    apiKey: 'test-key',
+    defaultRegion: 'us',
+    adapter
+  });
+
+  const result = await dispatch('list_tickets', { region: 'us', timezone: '-5' });
+  assert.equal(result.data.items[0].lastInteraction, '2026-06-10T21:00:00.000-05:00');
+});
+
+test('list_tickets treats timezone-less ISO timestamps as UTC before offset normalization', async () => {
+  const adapter = createAdapterStub({
+    listTickets: async () => ({
+      data: {
+        itemCount: 1,
+        items: [
+          {
+            ticketNo: 'INC-1002',
+            title: 'Naive timestamp ticket',
+            status: 'Open',
+            lastInteraction: '2026-06-11T01:00:00'
+          }
+        ]
+      },
+      meta: { statusCode: 200 }
+    })
+  });
+
+  const dispatch = createToolDispatcher({
+    apiKey: 'test-key',
+    defaultRegion: 'us',
+    adapter
+  });
+
+  const result = await dispatch('list_tickets', { region: 'us', timezone: '-5' });
+  assert.equal(result.data.items[0].lastInteraction, '2026-06-10T20:00:00.000-05:00');
+});
+
+test('get_ticket returns stable null-shaped ticket when payload is missing', async () => {
+  const adapter = createAdapterStub({
+    getTicket: async () => ({
+      data: { ticket: null },
+      meta: { statusCode: 200 }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket', { region: 'us', ticketId: 'missing-ticket' });
+
+  assert.equal(result.data.mode, 'summary');
+  assert.equal(result.data.ticket.id, null);
+  assert.equal(result.data.ticket.status, null);
+  assert.equal(result.data.ticket.requestor.name, null);
+  assert.equal(result.data.ticket.assignee.email, null);
+  assert.deepEqual(result.data.ticket.tags, []);
+  assert.equal(result.data.ticket.description.rawHtml, null);
+  assert.equal(result.data.ticket.description.plainText, null);
+});
+
+test('get_ticket supports item-wrapped and direct object payloads via adapter normalization', async () => {
+  const adapter = createAdapterStub({
+    getTicket: async () => ({
+      data: {
+        ticket: {
+          id: 't-1',
+          ticketNo: 1001,
+          title: 'VPN access',
+          status: 'Open',
+          requestor: { id: 'r1', name: 'R User', email: 'r@example.com' },
+          assignee: { id: 'a1', name: 'A User', email: 'a@example.com' },
+          createdOn: '2026-06-11T01:00:00.000Z',
+          lastUpdatedOn: '2026-06-11T02:00:00.000Z',
+          tags: []
+        }
+      },
+      meta: { statusCode: 200 }
+    })
+  });
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket', { region: 'us', ticketId: 't-1', timezone: '-5' });
+
+  assert.equal(result.data.mode, 'summary');
+  assert.equal(result.data.ticket.id, 't-1');
+  assert.equal(result.data.ticket.ticketNo, 1001);
+  assert.equal(result.data.ticket.createdOn, '2026-06-10T20:00:00.000-05:00');
+  assert.equal(result.data.ticket.updatedOn, '2026-06-10T21:00:00.000-05:00');
+  assert.equal(result.data.ticket.attachmentsCount, null);
+  assert.equal(result.data.ticket.activityCount, null);
+  assert.equal(result.data.ticket.description.rawHtml, null);
+});
+
+test('get_ticket_activities supports full mode with action typing, changes, and continuation token', async () => {
+  const adapter = createAdapterStub({
+    getTicketActivities: async () => ({
+      data: {
+        items: [
+          {
+            id: 'act-1',
+            action: 'Start Ticket',
+            createdDateTime: '2026-06-11T03:00:00.000Z',
+            createdBy: { id: 'u1', name: 'Agent', email: 'agent@example.com' },
+            comment: '<p>Started work</p>',
+            changes: [{ name: 'status', oldValue: 'Open', newValue: 'Started' }],
+            attachments: [{ id: 'att-1', filename: 'screenshot.png', src: 'https://example.test/screenshot.png' }]
+          }
+        ],
+        itemCount: 1,
+        continuationToken: 'next-page'
+      },
+      meta: { statusCode: 200, continuationToken: 'next-page' }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket_activities', {
+    region: 'us',
+    ticketId: 't-1',
+    mode: 'full',
+    timezone: '-5'
+  });
+
+  assert.equal(result.data.mode, 'full');
+  assert.equal(result.data.continuationToken, 'next-page');
+  assert.equal(result.meta.continuationToken, 'next-page');
+  assert.equal(result.data.items[0].action, 'started');
+  assert.equal(result.data.items[0].changes[0].field, 'status');
+  assert.equal(result.data.items[0].comment.rawHtml, '<p>Started work</p>');
+  assert.equal(result.data.items[0].comment.plainText, 'Started work');
+  assert.equal(result.data.items[0].timestamp, '2026-06-10T22:00:00.000-05:00');
+  assert.equal(result.data.items[0].user.name, 'Agent');
+  assert.equal(result.data.items[0].attachments[0].name, 'screenshot.png');
+});
+
+test('get_ticket full mode keeps ticket activityCount separate from fetched activity page count', async () => {
+  const adapter = createAdapterStub({
+    getTicket: async () => ({
+      data: {
+        ticket: {
+          id: 't-1',
+          ticketNo: 1001,
+          title: 'VPN access',
+          status: 'Open',
+          requestor: { name: 'R User' },
+          assignee: { name: 'A User' },
+          activityCount: 12
+        }
+      },
+      meta: { statusCode: 200 }
+    }),
+    getTicketActivities: async () => ({
+      data: {
+        items: [
+          {
+            id: 'act-1',
+            comment: '<p>First visible activity page item</p>',
+            createdDateTime: '2026-06-11T03:00:00.000Z',
+            createdBy: 'Agent'
+          }
+        ],
+        itemCount: 1,
+        continuationToken: 'next-page'
+      },
+      meta: { statusCode: 200, continuationToken: 'next-page' }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket', {
+    region: 'us',
+    ticketId: 't-1',
+    mode: 'full',
+    timezone: '-5'
+  });
+
+  assert.equal(result.data.ticket.activityCount, 12);
+  assert.equal(result.data.activities.itemCount, 1);
+  assert.equal(result.data.activities.continuationToken, 'next-page');
+  assert.equal(result.data.activities.items[0].action, 'commented');
+  assert.equal(result.data.activities.items[0].user.name, 'Agent');
+});
+
+test('get_ticket uses explicit mode only and ignores non-schema hint fields', async () => {
+  let activitiesCalls = 0;
+  const adapter = createAdapterStub({
+    getTicket: async () => ({
+      data: {
+        ticket: {
+          id: 't-1',
+          ticketNo: 1001,
+          title: 'VPN access',
+          status: 'Open'
+        }
+      },
+      meta: { statusCode: 200 }
+    }),
+    getTicketActivities: async () => {
+      activitiesCalls += 1;
+      return {
+        data: { items: [], itemCount: 0, continuationToken: null },
+        meta: { statusCode: 200, continuationToken: null }
+      };
+    }
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  const byHintOnly = await dispatch('get_ticket', { region: 'us', ticketId: 't-1', details: true });
+  assert.equal(byHintOnly.data.mode, 'summary');
+  assert.ok(!Object.prototype.hasOwnProperty.call(byHintOnly.data, 'activities'));
+
+  const byExplicitMode = await dispatch('get_ticket', { region: 'us', ticketId: 't-1', mode: 'full' });
+  assert.equal(byExplicitMode.data.mode, 'full');
+  assert.ok(Object.prototype.hasOwnProperty.call(byExplicitMode.data, 'activities'));
+
+  assert.equal(activitiesCalls, 1);
+});
+
+test('get_ticket full mode leaves unknown ticket activityCount as null', async () => {
+  const adapter = createAdapterStub({
+    getTicket: async () => ({
+      data: {
+        ticket: {
+          id: 't-1',
+          ticketNo: 1001,
+          title: 'VPN access',
+          status: 'Open'
+        }
+      },
+      meta: { statusCode: 200 }
+    }),
+    getTicketActivities: async () => ({
+      data: {
+        items: [{ id: 'act-1', comment: 'Visible page item' }],
+        itemCount: 1,
+        continuationToken: null
+      },
+      meta: { statusCode: 200, continuationToken: null }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket', {
+    region: 'us',
+    ticketId: 't-1',
+    mode: 'full'
+  });
+
+  assert.equal(result.data.ticket.activityCount, null);
+  assert.equal(result.data.activities.itemCount, 1);
 });
 
 test('validation action uses strict Closed match before resolved-compatible fallback', async () => {
@@ -257,6 +563,9 @@ test('practical tools filter by perspective, unseen counters, top clipping, and 
               {
                 id: 'u1',
                 status: 'Open',
+                resolvedStatus: ['Resolved', 'Closed'],
+                firstResolutionOn: null,
+                lastResolutionOn: null,
                 assignee: { email: 'user@example.com' },
                 requestor: { email: 'other@example.com' },
                 assigneeUnseenEventCnt: 2,
@@ -303,7 +612,15 @@ test('practical tools filter by perspective, unseen counters, top clipping, and 
     maxPages: 5
   });
   assert.equal(unresolved.data.itemCount, 1);
-  assert.equal(unresolved.data.items[0].id, 'u1');
+  assert.equal(unresolved.data.items[0].ticketNo, null);
+  assert.equal(unresolved.data.items[0].requestor.name, null);
+  assert.equal(unresolved.data.items[0].status, 'Open');
+  assert.equal(unresolved.data.items[0].assignee.id, null);
+  assert.equal(unresolved.data.items[0].unseenUpdates.assignee, 2);
+  assert.equal(unresolved.data.items[0].unseenUpdates.requestor, 0);
+  assert.deepEqual(unresolved.data.items[0].resolvedStatus, ['Resolved', 'Closed']);
+  assert.equal(unresolved.data.items[0].firstResolutionOn, null);
+  assert.equal(unresolved.data.items[0].lastResolutionOn, null);
 
   const unreadRequestor = await dispatch('find_my_tickets_with_unread_updates', {
     region: 'us',
@@ -313,5 +630,8 @@ test('practical tools filter by perspective, unseen counters, top clipping, and 
     maxPages: 5
   });
   assert.equal(unreadRequestor.data.itemCount, 1);
-  assert.equal(unreadRequestor.data.items[0].id, 'u3');
+  assert.equal(unreadRequestor.data.items[0].status, 'Open');
+  assert.equal(unreadRequestor.data.items[0].requestor.email, 'user@example.com');
+  assert.equal(unreadRequestor.data.items[0].unseenUpdates.assignee, 0);
+  assert.equal(unreadRequestor.data.items[0].unseenUpdates.requestor, 4);
 });

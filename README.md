@@ -43,7 +43,7 @@ Using with Claude generally means reusing the same tool schema/adapter logic, th
 ## Runtime assumptions
 - Region defaults: `us` (`https://teamswork.azure-api.net/ticketing/v1`)
 - Typical timezone default: `-5`
-- Node.js runtime: Node 18+ with ESM support. CI validates on Node 18 and Node 22.
+- Node.js runtime: Node 18+ with ESM support is only needed when running the optional starter JS adapter/dispatcher utilities locally. CI validates these on Node 18 and Node 22.
 - API key is provided via environment variable:
   - `ticketingAPIKey` (preferred in current scripts)
   - `TICKETING_API_KEY` (fallback)

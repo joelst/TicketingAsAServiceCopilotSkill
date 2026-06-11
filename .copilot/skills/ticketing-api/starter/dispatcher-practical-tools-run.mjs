@@ -40,22 +40,26 @@ const compact = {
     itemCount: unresolved.data.itemCount,
     totalMatchedBeforeTop: unresolved.data.totalMatchedBeforeTop,
     sample: unresolved.data.items.slice(0, 3).map((t) => ({
-      id: t.id,
+      ticketNo: t.ticketNo,
       status: t.status,
       title: t.title,
-      assigneeUnseenEventCnt: t.assigneeUnseenEventCnt,
-      requestorUnseenEventCnt: t.requestorUnseenEventCnt
+      priority: t.priority,
+      requestorName: t.requestor && t.requestor.name,
+      assigneeUnseenEventCnt: t.unseenUpdates && t.unseenUpdates.assignee,
+      requestorUnseenEventCnt: t.unseenUpdates && t.unseenUpdates.requestor
     }))
   },
   unread: {
     itemCount: unread.data.itemCount,
     totalMatchedBeforeTop: unread.data.totalMatchedBeforeTop,
     sample: unread.data.items.slice(0, 3).map((t) => ({
-      id: t.id,
+      ticketNo: t.ticketNo,
       status: t.status,
       title: t.title,
-      assigneeUnseenEventCnt: t.assigneeUnseenEventCnt,
-      requestorUnseenEventCnt: t.requestorUnseenEventCnt
+      priority: t.priority,
+      requestorName: t.requestor && t.requestor.name,
+      assigneeUnseenEventCnt: t.unseenUpdates && t.unseenUpdates.assignee,
+      requestorUnseenEventCnt: t.unseenUpdates && t.unseenUpdates.requestor
     }))
   }
 };

@@ -251,3 +251,72 @@ test('updateTicketStatus passes through unknown resolution values unchanged', as
 
   assert.equal(capturedBody.resolution, 'customWorkflowOutcome');
 });
+
+test('getTicket normalizes direct object payload to data.ticket', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, { id: 't1', ticketNo: 'INC-1', title: 'Issue' })
+  ], 0);
+
+  const result = await adapter.getTicket({
+    region: 'us',
+    ticketId: 't1'
+  });
+
+  assert.equal(result.data.ticket.id, 't1');
+  assert.equal(result.data.ticket.ticketNo, 'INC-1');
+});
+
+test('getTicket unwraps ticket-wrapped payload to data.ticket', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, {
+      ticket: { id: 't2', ticketNo: 1002, title: 'Wrapped issue' }
+    })
+  ], 0);
+
+  const result = await adapter.getTicket({
+    region: 'us',
+    ticketId: 't2'
+  });
+
+  assert.equal(result.data.ticket.id, 't2');
+  assert.equal(result.data.ticket.ticketNo, 1002);
+  assert.equal(result.data.ticket.title, 'Wrapped issue');
+});
+
+test('getTicketActivities returns continuationToken from body when header is absent', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, {
+      items: [{ id: 'a1', action: 'commented' }],
+      itemCount: 1,
+      continuationToken: 'body-token'
+    })
+  ], 0);
+
+  const result = await adapter.getTicketActivities({
+    region: 'us',
+    ticketId: 't1',
+    limit: 50
+  });
+
+  assert.equal(result.data.itemCount, 1);
+  assert.equal(result.data.continuationToken, 'body-token');
+  assert.equal(result.meta.continuationToken, 'body-token');
+});
+
+test('listTickets normalizes body continuationToken into data and meta', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, {
+      items: [{ id: 't1', ticketNo: 1001 }],
+      continuationToken: 'ticket-body-token'
+    })
+  ], 0);
+
+  const result = await adapter.listTickets({
+    region: 'us',
+    limit: 50
+  });
+
+  assert.equal(result.data.itemCount, 1);
+  assert.equal(result.data.continuationToken, 'ticket-body-token');
+  assert.equal(result.meta.continuationToken, 'ticket-body-token');
+});

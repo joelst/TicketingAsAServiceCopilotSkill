@@ -6,7 +6,7 @@ This folder contains a plain JavaScript starter adapter for Plan A.
 - adapter.js: region-aware, key-authenticated API adapter with retry and normalized errors.
 
 ## Runtime expectations
-- Node.js 18 or newer for built-in fetch support (validated in CI on Node 18 and Node 22).
+- Node.js 18 or newer is only required for the optional starter adapter/dispatcher scripts in this folder (validated in CI on Node 18 and Node 22).
 - API key from your Ticketing As A Service instance.
 
 ## Read-only smoke test
@@ -59,4 +59,3 @@ Each confirmation payload includes a `confirmationReason`:
 - `write_operation` for all other gated writes.
 
 Read tools (list_tickets, get_ticket, get_instance, find_my_unresolved_tickets, find_my_tickets_with_unread_updates) bypass the gate. If no `confirmAction` is supplied, the dispatcher defaults to allowing the write, so provide one to enforce interactive approval.
-
