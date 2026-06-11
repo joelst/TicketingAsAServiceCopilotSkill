@@ -25,8 +25,8 @@ if (-not $key) {
     exit 1
 }
 
-$baseUri = "$($hosts[$Region])/ticketing/v1/instance?timezone=$Timezone"
-Write-Output "Base URI : $baseUri"
+$baseUri = "$($hosts[$Region])/ticketing/v1/instance?timezone=$([uri]::EscapeDataString($Timezone))"
+Write-Output "Base URI : $($baseUri)"
 Write-Output "Key length: $($key.Length)"
 Write-Output ''
 

@@ -219,7 +219,18 @@ $writeResp = Invoke-SafeRestMethod -Method 'POST' -Uri $writeUri -ContentType 'a
 
 $actUri = "$($base)/tickets/$($encodedTargetId)/activities?key=$encodedKey"
 $activitiesResp = Invoke-SafeRestMethod -Method 'GET' -Uri $actUri -ContentType 'application/json'
-$found = @($activitiesResp.items | Where-Object { $_.comment -eq $comment }).Count
+
+# The API may normalize line endings or trim the stored comment, so compare on a
+# whitespace-normalized form (unify CRLF/LF, collapse trailing whitespace) rather than
+# strict equality to avoid a false 0-match on a write that actually succeeded.
+function Get-NormalizedComment {
+  param([object]$Value)
+  if ($null -eq $Value) { return '' }
+  return (([string]$Value) -replace "`r`n", "`n").Trim()
+}
+
+$normalizedComment = Get-NormalizedComment $comment
+$found = @($activitiesResp.items | Where-Object { (Get-NormalizedComment $_.comment) -eq $normalizedComment }).Count
 
 Write-Output ('TargetTicketId={0}' -f $target.id)
 Write-Output ('TargetStatus={0}' -f $target.status)

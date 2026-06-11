@@ -372,7 +372,7 @@
           },
           "resolution": {
             "type": "string",
-            "description": "Resolution code, required when status is Resolved or Closed. Canonical values: fixed, cannotResolve, cancelled. Common variants (e.g. 'canceled', 'cannot resolve') are normalized by the adapter, and instances with custom workflows may define other codes, so any non-empty string is accepted. Prefer a canonical value when possible."
+            "description": "Optional resolution code recorded with the status change. Verified live: the API accepts a move to Resolved/Closed WITHOUT a resolution (HTTP 200), so it is not required — but providing one records the outcome. Canonical values: fixed, cannotResolve, cancelled. Common variants (e.g. 'canceled', 'cannot resolve') are normalized by the adapter, and instances with custom workflows may define other codes, so any non-empty string is accepted. Prefer a canonical value when supplied."
           },
           "comment": {
             "type": "string"
