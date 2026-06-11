@@ -60,6 +60,8 @@ function buildCanonicalError (response, body, retryable) {
     canonicalType = 'validation_error';
   } else if (status === 401) {
     canonicalType = 'auth_error';
+  } else if (status === 403) {
+    canonicalType = 'forbidden';
   } else if (status === 404) {
     canonicalType = 'not_found';
   } else if (status === 429) {
@@ -214,10 +216,11 @@ export class TicketingApiAdapter {
     const host = this.resolveHost(region);
     const url = new URL(`${host}${BASE_PATH}${path}`);
 
-    url.searchParams.set('key', this.apiKey);
-
-    const timezone = query.timezone || this.defaultTimezone;
-    if (timezone) {
+    const hasTimezone = query.timezone !== undefined && query.timezone !== null && query.timezone !== '';
+    const timezone = hasTimezone ? query.timezone : this.defaultTimezone;
+    // Explicit emptiness check: numeric 0 (UTC) is a valid offset but falsy, so it must not
+    // be dropped or fall through to the server default.
+    if (timezone !== undefined && timezone !== null && timezone !== '') {
       url.searchParams.set('timezone', String(timezone));
     }
 
@@ -229,6 +232,8 @@ export class TicketingApiAdapter {
         url.searchParams.set(queryKey, String(value));
       }
     }
+
+    url.searchParams.set('key', this.apiKey);
 
     const requestInit = {
       method,
@@ -468,6 +473,58 @@ export class TicketingApiAdapter {
       path: '/instance',
       query: {
         timezone: input.timezone
+      }
+    });
+  }
+
+  getTags (input) {
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: '/tags',
+      query: {
+        timezone: input.timezone
+      }
+    });
+  }
+
+  getTicketAttachments (input) {
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: `/tickets/${encodeURIComponent(input.ticketId)}/attachments`,
+      query: {
+        timezone: input.timezone
+      }
+    });
+  }
+
+  // activityId must come from item.activityId in the addTicketAttachmentLinks response.
+  // Passing an activityId from getTicketActivities returns a 500.
+  getActivityAttachments (input) {
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: `/tickets/activity/${encodeURIComponent(input.activityId)}/attachments`,
+      query: {
+        timezone: input.timezone
+      }
+    });
+  }
+
+  addTicketAttachmentLinks (input) {
+    return this.request({
+      region: input.region,
+      method: 'POST',
+      path: `/tickets/${encodeURIComponent(input.ticketId)}/attachments`,
+      query: {
+        timezone: input.timezone
+      },
+      body: {
+        comment: input.comment,
+        attachments: input.attachments,
+        user: input.user,
+        isPrivate: input.isPrivate ?? false
       }
     });
   }

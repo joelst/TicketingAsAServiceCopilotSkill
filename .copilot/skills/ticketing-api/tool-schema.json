@@ -30,10 +30,12 @@
             "description": "Response verbosity for read output. Use summary by default; use full for full-fidelity payloads."
           },
           "search": {
-            "type": "string"
+            "type": "string",
+            "description": "Full-text search across all ticket fields."
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "Filter by ticket title (substring match)."
           },
           "status": {
             "type": "string",
@@ -63,10 +65,12 @@
             ]
           },
           "tags": {
-            "type": "string"
+            "type": "string",
+            "description": "Comma-separated tag filter. Format: '{tagCategoryId}_{tagText}' (e.g. '2283653a-8d36-40eb-9a68-73eb3b331811_my tag'). Use get_tags to discover valid tagCategoryId values."
           },
           "orderBy": {
-            "type": "string"
+            "type": "string",
+            "description": "Field to sort by. Known values: status, ticketId, title, requestorName, requestorEmail, assigneeName, assigneeEmail, expectedDate, priority, createdDateTime, lastInteraction. The backend may accept additional field names; the value is passed through as-is."
           },
           "order": {
             "type": "string",
@@ -237,7 +241,8 @@
                 "type": "string"
               },
               "description": {
-                "type": "string"
+                "type": "string",
+                "description": "Ticket description in HTML. Use <p> for paragraphs, <br> for line breaks, <strong> for bold, <u> for underline. Example: <p><strong>Summary</strong></p><p>Detail</p>"
               },
               "priority": {
                 "type": "string",
@@ -284,7 +289,10 @@
                 "additionalProperties": false
               },
               "expectedDate": {
-                "type": "string"
+                "type": "string",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "Date only, format YYYY-MM-DD (e.g. 2026-04-01). Never use a datetime string when customFields is also present — the API silently discards the ticket with no error. The pattern rejects datetime strings even when the validator treats format as a non-asserting annotation."
               },
               "tags": {
                 "type": "array",
@@ -363,7 +371,8 @@
             "description": "Target workflow status label. Built-in values include Open, Reopened, Started, Resolved, and Closed, but instances may define custom workflow labels. Discover the exact allowed values for the target instance with get_instance before attempting a status change."
           },
           "resolution": {
-            "type": "string"
+            "type": "string",
+            "description": "Resolution code, required when status is Resolved or Closed. Canonical values: fixed, cannotResolve, cancelled. Common variants (e.g. 'canceled', 'cannot resolve') are normalized by the adapter, and instances with custom workflows may define other codes, so any non-empty string is accepted. Prefer a canonical value when possible."
           },
           "comment": {
             "type": "string"
@@ -420,12 +429,14 @@
           },
           "ticket": {
             "type": "object",
+            "minProperties": 1,
             "properties": {
               "title": {
                 "type": "string"
               },
               "description": {
-                "type": "string"
+                "type": "string",
+                "description": "Ticket description in HTML. Use <p> for paragraphs, <br> for line breaks, <strong> for bold, <u> for underline. Example: <p><strong>Summary</strong></p><p>Detail</p>"
               },
               "priority": {
                 "type": "string",
@@ -467,7 +478,10 @@
                 "additionalProperties": false
               },
               "expectedDate": {
-                "type": "string"
+                "type": "string",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "Date only, format YYYY-MM-DD (e.g. 2026-04-01). Never use a datetime string when customFields is also present — the API silently discards the ticket with no error. The pattern rejects datetime strings even when the validator treats format as a non-asserting annotation."
               },
               "tags": {
                 "type": "array",
@@ -668,10 +682,12 @@
             "type": "string"
           },
           "userEmail": {
-            "type": "string"
+            "type": "string",
+            "description": "Email of the user whose tickets to return. Required at call time unless the connection is configured with a default current-user email; the dispatcher throws if neither is available. If it is not supplied and no default is configured, ask the user for their email before calling."
           },
           "assigneeEmail": {
-            "type": "string"
+            "type": "string",
+            "description": "Legacy alias for userEmail (assignee perspective). Prefer userEmail."
           },
           "perspective": {
             "type": "string",
@@ -735,10 +751,12 @@
             "type": "string"
           },
           "userEmail": {
-            "type": "string"
+            "type": "string",
+            "description": "Email of the user whose tickets to return. Required at call time unless the connection is configured with a default current-user email; the dispatcher throws if neither is available. If it is not supplied and no default is configured, ask the user for their email before calling."
           },
           "assigneeEmail": {
-            "type": "string"
+            "type": "string",
+            "description": "Legacy alias for userEmail (assignee perspective). Prefer userEmail."
           },
           "perspective": {
             "type": "string",
@@ -776,6 +794,165 @@
               "ASC",
               "DESC"
             ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_tags",
+      "description": "Get all tag categories and their tags. Call this before filtering tickets by tags or creating tickets with tags, to obtain valid tagCategoryId values for the filter format '{tagCategoryId}_{tagText}'.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_ticket_attachments",
+      "description": "List all attachments for a ticket.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticketId"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "ticketId": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_activity_attachments",
+      "description": "List attachments for a specific activity. The activityId must come from item.activityId in the add_ticket_attachment_links response — not from get_ticket_activities. Passing an activityId from get_ticket_activities returns a 500 error.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "activityId"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "activityId": {
+            "type": "string",
+            "description": "Must come from item.activityId in the add_ticket_attachment_links response, not from get_ticket_activities."
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "add_ticket_attachment_links",
+      "description": "Add attachment links to a ticket activity.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "region",
+          "ticketId",
+          "attachments",
+          "user"
+        ],
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "us",
+              "eu",
+              "apac"
+            ]
+          },
+          "ticketId": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "src"
+              ],
+              "properties": {
+                "src": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^https://",
+                  "description": "HTTPS URL of the attachment. Only https:// URLs are accepted; schemes such as javascript:, file:, and data: are rejected to avoid persisting unsafe links."
+                },
+                "caption": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "isPrivate": {
+            "type": "boolean",
+            "default": false
+          },
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "email"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

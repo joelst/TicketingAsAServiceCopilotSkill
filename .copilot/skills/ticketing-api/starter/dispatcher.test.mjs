@@ -12,6 +12,10 @@ function createAdapterStub (overrides = {}) {
     updateTicketStatus: async () => ({ data: {}, meta: { statusCode: 200 } }),
     addComment: async () => ({ data: { message: 'ok' }, meta: { statusCode: 200 } }),
     getInstance: async () => ({ data: {}, meta: { statusCode: 200 } }),
+    getTags: async () => ({ data: { items: [] }, meta: { statusCode: 200 } }),
+    getTicketAttachments: async () => ({ data: { items: [] }, meta: { statusCode: 200 } }),
+    getActivityAttachments: async () => ({ data: { items: [] }, meta: { statusCode: 200 } }),
+    addTicketAttachmentLinks: async () => ({ data: { items: [] }, meta: { statusCode: 200 } }),
     request: async () => ({ data: { items: [] }, meta: { statusCode: 200 } }),
     ...overrides
   };
@@ -438,7 +442,6 @@ test('validation action uses strict Closed match before resolved-compatible fall
             {
               id: 'resolved-ticket',
               status: 'In Progress',
-              resolvedStatus: ['In Progress'],
               requestor: { email: 'requestor@example.com' },
               assignee: { id: 'a1', name: 'Assignee', email: 'assignee@example.com' }
             },
@@ -573,7 +576,6 @@ test('practical tools filter by perspective, unseen counters, top clipping, and 
               {
                 id: 'u1',
                 status: 'Open',
-                resolvedStatus: ['Resolved', 'Closed'],
                 firstResolutionOn: null,
                 lastResolutionOn: null,
                 assignee: { email: 'user@example.com' },
@@ -628,7 +630,7 @@ test('practical tools filter by perspective, unseen counters, top clipping, and 
   assert.equal(unresolved.data.items[0].assignee.id, null);
   assert.equal(unresolved.data.items[0].unseenUpdates.assignee, 2);
   assert.equal(unresolved.data.items[0].unseenUpdates.requestor, 0);
-  assert.deepEqual(unresolved.data.items[0].resolvedStatus, ['Resolved', 'Closed']);
+  assert.equal(unresolved.data.items[0].resolvedStatus, null);
   assert.equal(unresolved.data.items[0].firstResolutionOn, null);
   assert.equal(unresolved.data.items[0].lastResolutionOn, null);
 
@@ -645,4 +647,143 @@ test('practical tools filter by perspective, unseen counters, top clipping, and 
   assert.equal(unreadRequestor.data.items[0].unseenUpdates.assignee, 0);
   assert.equal(unreadRequestor.data.items[0].unseenUpdates.requestor, 4);
   assert.ok(listSelects.every((select) => !String(select || '').includes('resolvedStatus')));
+});
+
+test('list_tickets with mode=full includes description in select; mode=summary does not', async () => {
+  const selects = [];
+  const adapter = createAdapterStub({
+    listTickets: async (input) => {
+      selects.push(input.select);
+      return { data: { items: [] }, meta: { statusCode: 200 } };
+    }
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  await dispatch('list_tickets', { region: 'us', mode: 'full' });
+  await dispatch('list_tickets', { region: 'us', mode: 'summary' });
+  await dispatch('list_tickets', { region: 'us' });
+
+  assert.ok(String(selects[0]).includes('description'), 'mode=full select should include description');
+  assert.ok(!String(selects[1]).includes('description'), 'mode=summary select should not include description');
+  assert.ok(!String(selects[2]).includes('description'), 'default mode select should not include description');
+});
+
+test('read-only tag and attachment tools route to their adapter methods and bypass the gate', async () => {
+  const calls = [];
+  const adapter = createAdapterStub({
+    getTags: async (input) => { calls.push(['getTags', input]); return { data: { items: [] }, meta: { statusCode: 200 } }; },
+    getTicketAttachments: async (input) => { calls.push(['getTicketAttachments', input]); return { data: { items: [] }, meta: { statusCode: 200 } }; },
+    getActivityAttachments: async (input) => { calls.push(['getActivityAttachments', input]); return { data: { items: [] }, meta: { statusCode: 200 } }; }
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  let confirmCalls = 0;
+  const confirmSpy = async () => { confirmCalls += 1; return true; };
+
+  await dispatch('get_tags', { region: 'us', timezone: '-5' }, { confirmAction: confirmSpy });
+  await dispatch('get_ticket_attachments', { region: 'us', ticketId: 't-1', timezone: '-5' }, { confirmAction: confirmSpy });
+  await dispatch('get_activity_attachments', { region: 'us', activityId: 'a-1', timezone: '-5' }, { confirmAction: confirmSpy });
+
+  assert.deepEqual(calls.map((c) => c[0]), ['getTags', 'getTicketAttachments', 'getActivityAttachments']);
+  assert.equal(calls[0][1].region, 'us');
+  assert.equal(calls[1][1].ticketId, 't-1');
+  assert.equal(calls[2][1].activityId, 'a-1');
+  assert.equal(confirmCalls, 0, 'read-only tools must not call the confirmation gate');
+});
+
+test('add_ticket_attachment_links is gated, routes to adapter when confirmed', async () => {
+  let addCalls = 0;
+  let capturedInput = null;
+  const adapter = createAdapterStub({
+    addTicketAttachmentLinks: async (input) => {
+      addCalls += 1;
+      capturedInput = input;
+      return { data: { items: [{ activityId: 'act-99' }] }, meta: { statusCode: 200 } };
+    }
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  const payloads = [];
+  const result = await dispatch('add_ticket_attachment_links', {
+    region: 'us',
+    ticketId: 't-1',
+    attachments: [{ src: 'https://example.test/a.png', caption: 'a' }],
+    user: { id: 'u1', name: 'User', email: 'user@example.com' }
+  }, { confirmAction: async (payload) => { payloads.push(payload); return true; } });
+
+  assert.equal(addCalls, 1);
+  assert.equal(capturedInput.ticketId, 't-1');
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].confirmationReason, 'write_operation');
+  assert.equal(result.data.items[0].activityId, 'act-99');
+});
+
+test('add_ticket_attachment_links is cancelled and does not call adapter when denied', async () => {
+  let addCalls = 0;
+  const adapter = createAdapterStub({
+    addTicketAttachmentLinks: async () => {
+      addCalls += 1;
+      return { data: {}, meta: { statusCode: 200 } };
+    }
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  const result = await dispatch('add_ticket_attachment_links', {
+    region: 'us',
+    ticketId: 't-1',
+    attachments: [{ src: 'https://example.test/a.png', caption: 'a' }],
+    user: { id: 'u1', name: 'User', email: 'user@example.com' }
+  }, { confirmAction: async () => false });
+
+  assert.equal(result.cancelled, true);
+  assert.equal(addCalls, 0);
+});
+
+test('get_ticket preserves resolvedStatus as an array (verified live shape) and nulls non-arrays', async () => {
+  const adapterArray = createAdapterStub({
+    getTicket: async () => ({
+      data: { ticket: { id: 't-1', status: 'Closed', resolvedStatus: ['Resolved', 'Closed'] } },
+      meta: { statusCode: 200 }
+    })
+  });
+  const dispatchArray = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter: adapterArray });
+  const arrResult = await dispatchArray('get_ticket', { region: 'us', ticketId: 't-1' });
+  assert.deepEqual(arrResult.data.ticket.resolvedStatus, ['Resolved', 'Closed']);
+
+  const adapterString = createAdapterStub({
+    getTicket: async () => ({
+      data: { ticket: { id: 't-2', status: 'Closed', resolvedStatus: 'fixed' } },
+      meta: { statusCode: 200 }
+    })
+  });
+  const dispatchString = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter: adapterString });
+  const strResult = await dispatchString('get_ticket', { region: 'us', ticketId: 't-2' });
+  assert.equal(strResult.data.ticket.resolvedStatus, null);
+});
+
+test('find_my_unresolved_tickets classifies custom statuses by resolvedStatus array membership', async () => {
+  const adapter = createAdapterStub({
+    listTickets: async () => ({
+      data: {
+        items: [
+          // Custom status that IS in its resolvedStatus set -> resolved -> excluded.
+          { id: 'done', status: 'Done', assignee: { email: 'user@example.com' }, resolvedStatus: ['Done', 'Closed'] },
+          // Custom status NOT in its resolvedStatus set -> unresolved -> included.
+          { id: 'inprog', status: 'In Progress', assignee: { email: 'user@example.com' }, resolvedStatus: ['Resolved', 'Closed'] }
+        ]
+      },
+      meta: { statusCode: 200 }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter, currentUserEmail: 'user@example.com' });
+  const result = await dispatch('find_my_unresolved_tickets', { region: 'us', perspective: 'assignee', top: 25, maxPages: 1 });
+
+  assert.equal(result.data.itemCount, 1);
+  assert.equal(result.data.items[0].status, 'In Progress');
+  assert.deepEqual(result.data.items[0].resolvedStatus, ['Resolved', 'Closed']);
 });

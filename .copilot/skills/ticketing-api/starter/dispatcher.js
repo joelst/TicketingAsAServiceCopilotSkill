@@ -5,7 +5,8 @@ const WRITE_TOOLS = new Set([
   'update_ticket',
   'update_ticket_status',
   'add_comment',
-  'validation_write_closed_ticket_comment'
+  'validation_write_closed_ticket_comment',
+  'add_ticket_attachment_links'
 ]);
 
 const LIST_TICKET_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,createdOn,lastUpdatedOn,lastInteraction,tags';
@@ -327,11 +328,14 @@ function isResolvedCompatible (ticket) {
     return true;
   }
 
-  const resolvedStatus = Array.isArray(ticket && ticket.resolvedStatus) ? ticket.resolvedStatus : [];
-  // Some tenants always include ['Resolved','Closed'] as policy values.
-  // Treat a ticket as resolved only when its CURRENT status is in that set.
-  if (status && resolvedStatus.includes(status)) {
-    return true;
+  // resolvedStatus is a list of workflow status labels that count as a resolved state
+  // for this ticket's (possibly custom) workflow — verified live: the API returns it as
+  // an array such as ['Resolved','Closed'], NOT a string code. Treat the ticket as
+  // resolved when its current status is one of those labels. Note: resolvedStatus is not
+  // a selectable list field (selecting it returns 500), so this branch only applies where
+  // the field is present (e.g. full single-ticket payloads).
+  if (status && Array.isArray(ticket && ticket.resolvedStatus)) {
+    return ticket.resolvedStatus.includes(status);
   }
 
   // Fallback only for payloads where status is missing.
@@ -342,17 +346,13 @@ function isResolvedCompatible (ticket) {
   return Boolean((ticket && ticket.firstResolutionOn) || (ticket && ticket.lastResolutionOn));
 }
 
-function buildValidationComment (input) {
+function buildValidationComment () {
   const stamp = new Date().toISOString();
   return [
     '### Connector Validation Note',
     '- Test type: live write-path validation',
     '- Trigger: Copilot skill validation action',
-    `- Timestamp: ${stamp}`,
-    '',
-    'Result:',
-    '- Posted via /tickets/{ticketId}/activities',
-    `- Criteria: assignee=${input.assigneeEmail}, requestor=${input.requestorEmail}`
+    `- Timestamp: ${stamp}`
   ].join('\n');
 }
 
@@ -422,7 +422,7 @@ async function runValidationWrite (adapter, input) {
     throw new Error('No qualifying ticket found for validation action.');
   }
 
-  const comment = input.comment || buildValidationComment(input);
+  const comment = input.comment || buildValidationComment();
   const user = {
     id: target.assignee && target.assignee.id,
     name: target.assignee && target.assignee.name,
@@ -556,9 +556,12 @@ async function listMyTickets (adapter, input, predicate) {
 
 async function listTicketsForDisplay (adapter, input) {
   const mode = resolveMode(input);
+  const defaultSelect = mode === 'full'
+    ? `${LIST_TICKET_SELECT_FIELDS},description`
+    : LIST_TICKET_SELECT_FIELDS;
   const response = await adapter.listTickets({
     ...input,
-    select: input.select || LIST_TICKET_SELECT_FIELDS
+    select: input.select || defaultSelect
   });
 
   const items = Array.isArray(response.data && response.data.items) ? response.data.items : [];
@@ -703,9 +706,18 @@ export function createToolDispatcher (config) {
         return adapter.addComment(input);
       case 'get_instance':
         return adapter.getInstance(input);
+      case 'get_tags':
+        return adapter.getTags(input);
+      case 'get_ticket_attachments':
+        return adapter.getTicketAttachments(input);
+      case 'get_activity_attachments':
+        return adapter.getActivityAttachments(input);
+      case 'add_ticket_attachment_links':
+        return adapter.addTicketAttachmentLinks(input);
       case 'validation_write_closed_ticket_comment':
-        if (!input.requestorEmail) {
-          throw new Error('requestorEmail is required for validation_write_closed_ticket_comment to prevent writes against unintended tickets.');
+        if (typeof input.requestorEmail !== 'string' || !input.requestorEmail.trim() ||
+            typeof input.assigneeEmail !== 'string' || !input.assigneeEmail.trim()) {
+          throw new Error('Both requestorEmail and assigneeEmail are required (non-empty) for validation_write_closed_ticket_comment to prevent writes against unintended tickets.');
         }
         return runValidationWrite(adapter, {
           region: input.region || config.defaultRegion || 'us',

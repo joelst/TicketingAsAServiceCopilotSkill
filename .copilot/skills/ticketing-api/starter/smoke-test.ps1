@@ -8,6 +8,7 @@ param(
   [string]$Timezone = '-5',
 
   [Parameter()]
+  [ValidateRange(1, 1000)]
   [int]$Limit = 3
 )
 
@@ -104,8 +105,9 @@ function Invoke-ReadOnlyCall {
   }
 }
 
-$instanceUri = "$($baseUrl)/instance?key=$([uri]::EscapeDataString($apiKey))&timezone=$([uri]::EscapeDataString($Timezone))"
-$listUri = "$($baseUrl)/tickets?key=$([uri]::EscapeDataString($apiKey))&timezone=$([uri]::EscapeDataString($Timezone))&limit=$($Limit)&orderBy=lastInteraction&order=DESC"
+$encodedKey = [uri]::EscapeDataString($apiKey)
+$instanceUri = "$($baseUrl)/instance?timezone=$([uri]::EscapeDataString($Timezone))&key=$encodedKey"
+$listUri = "$($baseUrl)/tickets?timezone=$([uri]::EscapeDataString($Timezone))&limit=$($Limit)&orderBy=lastInteraction&order=DESC&key=$encodedKey"
 
 $instanceResult = Invoke-ReadOnlyCall -Name 'GetInstance' -Uri $instanceUri
 $listResult = Invoke-ReadOnlyCall -Name 'ListTickets' -Uri $listUri
