@@ -48,6 +48,7 @@ Enable conversational ticket operations against Ticketing As A Service with safe
 - Treat `status` as the primary source of ticket state.
 - `resolvedStatus` is an array of workflow status labels that count as resolved for the ticket's workflow (verified live, e.g. `["Resolved","Closed"]`) — not a string resolution code, despite what the OpenAPI spec implies. A ticket is resolved-compatible when its current `status` is one of these labels. Do not request `resolvedStatus` in a list `select` (the API returns 500); it is returned in full single-ticket payloads.
 - If resolution state is ambiguous, use `firstResolutionOn` and `lastResolutionOn` as supporting signals.
+- `add_comment` accepts `isPrivate` (default false). Set `isPrivate: true` for an internal/private comment not visible to the requestor (verified live; the API honors it despite the OpenAPI request schema omitting it). Shaped activities expose `isPrivate` (true/false, or null when the source omits it).
 - Use timezone if provided by the user; otherwise rely on connection default timezone.
 - Use `mode=summary` by default for concise responses. Set `mode=full` explicitly when full-fidelity output is required.
 - `mode` is only applicable to read tools (`list_tickets`, `get_ticket`, `get_ticket_activities`).

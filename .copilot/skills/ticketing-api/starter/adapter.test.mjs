@@ -452,6 +452,41 @@ test('addTicketAttachmentLinks preserves explicit isPrivate=true', async () => {
   assert.equal(body.isPrivate, true);
 });
 
+test('addComment includes isPrivate in body, defaulting to false', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { id: 'c1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addComment({
+    region: 'us',
+    ticketId: 't-1',
+    timezone: '-5',
+    comment: 'hello',
+    user: { id: 'u1', name: 'User', email: 'user@example.com' }
+  });
+
+  assert.equal(captured.init.method, 'POST');
+  assert.ok(captured.url.pathname.endsWith('/tickets/t-1/activities'));
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.comment, 'hello');
+  assert.equal(body.isPrivate, false);
+});
+
+test('addComment preserves explicit isPrivate=true', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { id: 'c1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addComment({
+    region: 'us',
+    ticketId: 't-1',
+    comment: 'internal note',
+    user: { id: 'u1', name: 'User', email: 'user@example.com' },
+    isPrivate: true
+  });
+
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.isPrivate, true);
+});
+
 test('request sends numeric timezone 0 (UTC) instead of dropping it as falsy', async () => {
   const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
   const captured = captureRequest(adapter);

@@ -765,6 +765,105 @@ test('get_ticket preserves resolvedStatus as an array (verified live shape) and 
   assert.equal(strResult.data.ticket.resolvedStatus, null);
 });
 
+test('get_ticket_activities surfaces isPrivate on shaped activities (true/false/absent)', async () => {
+  const adapter = createAdapterStub({
+    getTicketActivities: async () => ({
+      data: {
+        items: [
+          { id: 'a1', comment: 'internal', isPrivate: true },
+          { id: 'a2', comment: 'public', isPrivate: false },
+          { id: 'a3', comment: 'legacy' }
+        ],
+        itemCount: 3,
+        continuationToken: null
+      },
+      meta: { statusCode: 200, continuationToken: null }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket_activities', { region: 'us', ticketId: 't-1', mode: 'full' });
+
+  assert.equal(result.data.items[0].isPrivate, true);
+  assert.equal(result.data.items[1].isPrivate, false);
+  assert.equal(result.data.items[2].isPrivate, null);
+});
+
+test('get_ticket_activities summary mode surfaces isPrivate via toActivitySummary', async () => {
+  const adapter = createAdapterStub({
+    getTicketActivities: async () => ({
+      data: {
+        items: [
+          { id: 'a1', comment: 'internal', isPrivate: true },
+          { id: 'a2', comment: 'public', isPrivate: false },
+          { id: 'a3', comment: 'legacy' }
+        ],
+        itemCount: 3,
+        continuationToken: null
+      },
+      meta: { statusCode: 200, continuationToken: null }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket_activities', { region: 'us', ticketId: 't-1' });
+
+  assert.equal(result.data.mode, 'summary');
+  assert.equal(result.data.items[0].isPrivate, true);
+  assert.equal(result.data.items[1].isPrivate, false);
+  assert.equal(result.data.items[2].isPrivate, null);
+});
+
+test('get_ticket full mode embeds activities with isPrivate shaped', async () => {
+  const adapter = createAdapterStub({
+    getTicket: async () => ({ data: { ticket: { id: 't-1', status: 'Open' } }, meta: { statusCode: 200 } }),
+    getTicketActivities: async () => ({
+      data: {
+        items: [
+          { id: 'a1', comment: 'internal', isPrivate: true },
+          { id: 'a2', comment: 'legacy' }
+        ],
+        itemCount: 2,
+        continuationToken: null
+      },
+      meta: { statusCode: 200, continuationToken: null }
+    })
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket', { region: 'us', ticketId: 't-1', mode: 'full' });
+
+  assert.equal(result.data.activities.items[0].isPrivate, true);
+  assert.equal(result.data.activities.items[1].isPrivate, null);
+});
+
+test('add_comment forwards isPrivate to adapter.addComment', async () => {
+  const captured = [];
+  const adapter = createAdapterStub({
+    addComment: async (input) => {
+      captured.push(input);
+      return { data: { message: 'ok' }, meta: { statusCode: 200 } };
+    }
+  });
+
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  await dispatch('add_comment', {
+    region: 'us', ticketId: 't-1', comment: 'internal',
+    user: { id: 'u1', name: 'U', email: 'u@e.com' }, isPrivate: true
+  }, { confirmAction: async () => true });
+
+  await dispatch('add_comment', {
+    region: 'us', ticketId: 't-1', comment: 'public',
+    user: { id: 'u1', name: 'U', email: 'u@e.com' }
+  }, { confirmAction: async () => true });
+
+  assert.equal(captured[0].isPrivate, true);
+  // The dispatcher forwards input verbatim; the false default for an omitted flag is
+  // applied in adapter.addComment (covered in adapter.test.mjs), so it arrives undefined here.
+  assert.equal(captured[1].isPrivate, undefined);
+});
+
 test('find_my_unresolved_tickets classifies custom statuses by resolvedStatus array membership', async () => {
   const adapter = createAdapterStub({
     listTickets: async () => ({

@@ -558,6 +558,11 @@
           "comment": {
             "type": "string"
           },
+          "isPrivate": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, posts an internal/private comment not visible to the requestor. Verified live: the API honors this on comment creation even though the OpenAPI insertCommentRequest schema omits it. Defaults to a public comment."
+          },
           "user": {
             "type": "object",
             "required": [

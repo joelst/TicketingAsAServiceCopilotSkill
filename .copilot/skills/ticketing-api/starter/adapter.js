@@ -461,7 +461,10 @@ export class TicketingApiAdapter {
       },
       body: {
         comment: input.comment,
-        user: input.user
+        user: input.user,
+        // Verified live: the API honors isPrivate on comment creation even though the
+        // OpenAPI insertCommentRequest schema omits it. Defaults to a public comment.
+        isPrivate: input.isPrivate ?? false
       }
     });
   }

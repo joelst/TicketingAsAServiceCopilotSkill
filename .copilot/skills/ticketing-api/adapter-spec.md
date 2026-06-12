@@ -79,6 +79,10 @@ Do not name `resolvedStatus` in a list `select`: the gateway returns 500 (verifi
 
 `resolvedStatus` is an array of workflow status labels (verified live, e.g. `["Resolved","Closed"]`), not the string resolution code the OpenAPI spec implies. `toTicketShape` preserves the array (or null), and `isResolvedCompatible` treats a ticket as resolved when its current `status` appears in that array.
 
+`add_comment` (POST /tickets/{id}/activities) accepts `isPrivate` in the request body and honors it (verified live: a comment posted with `isPrivate: true` reads back private, `false` reads back public), even though the OpenAPI `insertCommentRequest` schema omits the field. The adapter sends `isPrivate` (default false); shaped activities surface it.
+
+`resolution` on update_ticket_status is optional, not required for Resolved/Closed (verified live: HTTP 200 without it). Do not enforce it in the schema.
+
 ## Logging and telemetry
 
 Capture per call:

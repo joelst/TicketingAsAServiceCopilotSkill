@@ -212,6 +212,7 @@ function toActivitySummary (activity, timezone) {
       rawHtml: richComment.rawHtml,
       plainText: richComment.plainText
     },
+    isPrivate: activity && typeof activity.isPrivate === 'boolean' ? activity.isPrivate : null,
     changesCount: hasChanges ? changes.length : null,
     attachmentsCount: hasAttachments ? attachments.length : null
   };
@@ -230,6 +231,7 @@ function toActivityFull (activity, timezone) {
     timestamp: toOffsetTimestamp((activity && (activity.createdDateTime || activity.dateCreated || activity.createdOn || activity.timestamp || activity.updatedOn)) || null, timezone),
     user: toUserSummary(activity && (activity.createdBy || activity.author || activity.user)),
     comment: richComment,
+    isPrivate: activity && typeof activity.isPrivate === 'boolean' ? activity.isPrivate : null,
     changes,
     attachments
   };
