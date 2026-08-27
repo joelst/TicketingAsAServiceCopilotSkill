@@ -2,6 +2,8 @@
 
 Standalone repository for the [Ticketing As A Service](https://www.teamswork.app/products/microsoft-teams-ticketing/ticketingapi) Copilot skill package.
 
+The skill is framed for IT Helpdesk ticket operations (intake, assignment, private vs requestor-visible comments, workflow/status, attachments, tickets that need attention). The HTTP contract is Ticketing Public API **1.1.0**; canonical spec: docs/ticketing-api.openapi.json. Auth is the instance API key as query parameter key.
+
 ## Contents
 - `.copilot/skills/ticketing-api/SKILL.md`
 - `.copilot/skills/ticketing-api/tool-schema.json`

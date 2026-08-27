@@ -117,6 +117,30 @@ function toRichText (value) {
   };
 }
 
+function toTicketDescription (ticket) {
+  const html = ticket && ticket.description_HTML;
+  const text = ticket && ticket.description;
+  if (html !== undefined && html !== null && html !== '') {
+    return {
+      rawHtml: String(html),
+      plainText: toPlainText(html) || (text ? String(text) : null)
+    };
+  }
+  return toRichText(text);
+}
+
+function toActivityComment (activity) {
+  const html = activity && activity.comment_HTML;
+  const text = activity && (activity.comment || activity.message);
+  if (html !== undefined && html !== null && html !== '') {
+    return {
+      rawHtml: String(html),
+      plainText: toPlainText(html) || (text ? String(text) : null)
+    };
+  }
+  return toRichText(text);
+}
+
 function toUserSummary (user) {
   if (typeof user === 'string') {
     return {
@@ -198,7 +222,7 @@ function toActivitySummary (activity, timezone) {
   const changes = toChanges(activity);
   const { action, actionRaw } = normalizeActivityAction(activity, changes);
   const attachments = toAttachments(activity);
-  const richComment = toRichText(activity && (activity.comment || activity.message));
+  const richComment = toActivityComment(activity);
   const hasChanges = Array.isArray(activity && activity.changes);
   const hasAttachments = Array.isArray(activity && activity.attachments);
 
@@ -222,7 +246,7 @@ function toActivityFull (activity, timezone) {
   const changes = toChanges(activity);
   const { action, actionRaw } = normalizeActivityAction(activity, changes);
   const attachments = toAttachments(activity);
-  const richComment = toRichText(activity && (activity.comment || activity.message));
+  const richComment = toActivityComment(activity);
 
   return {
     id: (activity && (activity.id || activity.activityId)) || null,
@@ -265,11 +289,13 @@ function toTicketShape (ticket, timezone, mode) {
   if (!ticket || typeof ticket !== 'object') {
     if (mode === 'full') {
       emptyShape.attachments = [];
+      emptyShape.isCustomWorkflow = null;
+      emptyShape.workflow = [];
     }
     return emptyShape;
   }
 
-  const description = toRichText(ticket.description);
+  const description = toTicketDescription(ticket);
   const hasAttachments = Array.isArray(ticket.attachments);
   const attachments = hasAttachments ? ticket.attachments : [];
   const hasActivityCount = Object.prototype.hasOwnProperty.call(ticket, 'activityCount');
@@ -311,6 +337,10 @@ function toTicketShape (ticket, timezone, mode) {
 
   if (mode === 'full') {
     base.attachments = attachments;
+    base.isCustomWorkflow = Object.prototype.hasOwnProperty.call(ticket, 'isCustomWorkflow')
+      ? Boolean(ticket.isCustomWorkflow)
+      : null;
+    base.workflow = Array.isArray(ticket.workflow) ? ticket.workflow : [];
   }
 
   return base;
@@ -561,9 +591,11 @@ async function listTicketsForDisplay (adapter, input) {
   const defaultSelect = mode === 'full'
     ? `${LIST_TICKET_SELECT_FIELDS},description`
     : LIST_TICKET_SELECT_FIELDS;
+  const include = input.include || (mode === 'full' ? 'description_HTML' : undefined);
   const response = await adapter.listTickets({
     ...input,
-    select: input.select || defaultSelect
+    select: input.select || defaultSelect,
+    include
   });
 
   const items = Array.isArray(response.data && response.data.items) ? response.data.items : [];
@@ -582,7 +614,11 @@ async function listTicketsForDisplay (adapter, input) {
 
 async function getTicketForMode (adapter, input) {
   const mode = resolveMode(input);
-  const ticketResponse = await adapter.getTicket(input);
+  const include = input.include || (mode === 'full' ? 'description_HTML' : undefined);
+  const ticketResponse = await adapter.getTicket({
+    ...input,
+    include
+  });
   const ticket = ticketResponse.data && ticketResponse.data.ticket;
   const shapedTicket = toTicketShape(ticket, input.timezone, mode);
 
@@ -603,7 +639,8 @@ async function getTicketForMode (adapter, input) {
     timezone: input.timezone,
     ticketId: input.ticketId,
     continuationToken: input.continuationToken,
-    limit: input.limit
+    limit: input.limit,
+    include: 'comment_HTML'
   });
 
   const items = Array.isArray(activityResponse.data && activityResponse.data.items)
@@ -622,7 +659,11 @@ async function getTicketForMode (adapter, input) {
 
 async function getTicketActivitiesForMode (adapter, input) {
   const mode = resolveMode(input);
-  const response = await adapter.getTicketActivities(input);
+  const include = input.include || (mode === 'full' ? 'comment_HTML' : undefined);
+  const response = await adapter.getTicketActivities({
+    ...input,
+    include
+  });
   const items = Array.isArray(response.data && response.data.items) ? response.data.items : [];
   const itemCountValue = Number(response.data && response.data.itemCount);
   const formatter = mode === 'full' ? toActivityFull : toActivitySummary;

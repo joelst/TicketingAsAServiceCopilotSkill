@@ -1,11 +1,11 @@
 {
   "version": "0.1.0",
   "name": "ticketing-api-skill-tools",
-  "description": "Tool contracts for Ticketing As A Service conversational operations",
+  "description": "Tool contracts for Ticketing As A Service IT Helpdesk operations (Public API 1.1.0)",
   "tools": [
     {
       "name": "list_tickets",
-      "description": "List tickets with optional filtering, sorting, and pagination",
+      "description": "List IT Helpdesk tickets with optional filtering, sorting, and pagination",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -39,7 +39,11 @@
           },
           "status": {
             "type": "string",
-            "description": "Workflow status label. Built-in values include Open, Reopened, Started, Resolved, and Closed, but instances may define custom workflow labels. Discover the exact allowed values for the target instance with get_instance before relying on a specific label."
+            "description": "Legacy resolved-state filter. Open, Reopened, or In Progress return unresolved tickets; Resolved or Closed return resolved tickets. Use statusId for an exact workflow-state match. Custom workflows may use other labels; confirm with get_instance."
+          },
+          "statusId": {
+            "type": "string",
+            "description": "Exact workflow-state match. Prefer this over status when filtering to a specific state. Default labels: Open, Reopened, In Progress, Resolved, Closed. Discover custom IDs with get_instance."
           },
           "priority": {
             "type": "string",
@@ -82,6 +86,13 @@
           "select": {
             "type": "string"
           },
+          "include": {
+            "type": "string",
+            "enum": [
+              "description_HTML"
+            ],
+            "description": "Set to description_HTML to return the sanitized HTML description alongside the always-present plain-text description. OpenAPI 1.1.0; retained even when select is present."
+          },
           "offset": {
             "type": "integer",
             "minimum": 0
@@ -118,7 +129,7 @@
     },
     {
       "name": "get_ticket",
-      "description": "Get a ticket by id",
+      "description": "Get an IT Helpdesk ticket by id",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -147,17 +158,24 @@
               "full"
             ],
             "default": "summary",
-            "description": "Response verbosity. summary returns concise ticket fields; full includes embedded activity details."
+            "description": "Response verbosity. summary returns concise ticket fields; full includes HTML description (include=description_HTML) and embedded activity details paged via GET /tickets/{ticketId}/activities."
           },
           "continuationToken": {
             "type": "string",
-            "description": "Activity-page continuation token for embedded activities when mode=full. Does not page the ticket resource."
+            "description": "Activity-page continuation token for the companion GET /tickets/{ticketId}/activities request when mode=full. OpenAPI 1.1.0 GET /tickets/{ticketId} itself does not page."
           },
           "limit": {
             "type": "integer",
             "minimum": 1,
             "maximum": 1000,
-            "description": "Maximum number of embedded activity records to fetch when mode=full. Does not limit ticket retrieval."
+            "description": "Maximum number of embedded activity records to fetch when mode=full (passed to GET /tickets/{ticketId}/activities). Does not limit ticket retrieval."
+          },
+          "include": {
+            "type": "string",
+            "enum": [
+              "description_HTML"
+            ],
+            "description": "Set to description_HTML to return the sanitized HTML description alongside the always-present plain-text description. OpenAPI 1.1.0; retained even when select is present."
           }
         },
         "additionalProperties": false
@@ -165,7 +183,7 @@
     },
     {
       "name": "get_ticket_activities",
-      "description": "Get ticket activities with continuation token pagination and summary/full output modes",
+      "description": "Get ticket activities with continuation token pagination, optional include=comment_HTML, and summary/full output modes",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -197,12 +215,21 @@
             "description": "Response verbosity for activity output. summary returns compact activity records; full returns full-fidelity activity fields."
           },
           "continuationToken": {
-            "type": "string"
+            "type": "string",
+            "description": "Token from the previous response header or body to fetch the next activity page."
           },
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000
+            "maximum": 1000,
+            "description": "Maximum number of activities to return. OpenAPI 1.1.0: when omitted, all matching activities are requested."
+          },
+          "include": {
+            "type": "string",
+            "enum": [
+              "comment_HTML"
+            ],
+            "description": "Set to comment_HTML to include sanitized HTML in comment_HTML while comment remains plain text. OpenAPI 1.1.0."
           }
         },
         "additionalProperties": false
@@ -210,7 +237,7 @@
     },
     {
       "name": "create_ticket",
-      "description": "Create a new ticket",
+      "description": "Intake a new IT Helpdesk ticket",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -242,7 +269,11 @@
               },
               "description": {
                 "type": "string",
-                "description": "Ticket description in HTML. Use <p> for paragraphs, <br> for line breaks, <strong> for bold, <u> for underline. Example: <p><strong>Summary</strong></p><p>Detail</p>"
+                "description": "Plain-text ticket description. HTML characters are escaped. If both description and description_HTML are sent, description takes precedence."
+              },
+              "description_HTML": {
+                "type": "string",
+                "description": "Sanitized HTML ticket description. Script-capable elements, event-handler attributes, and javascript: URLs are removed. Returned in responses only when include=description_HTML."
               },
               "priority": {
                 "type": "string",
@@ -292,7 +323,7 @@
                 "type": "string",
                 "format": "date",
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                "description": "Date only, format YYYY-MM-DD (e.g. 2026-04-01). Never use a datetime string when customFields is also present — the API silently discards the ticket with no error. The pattern rejects datetime strings even when the validator treats format as a non-asserting annotation."
+                "description": "Date only, format YYYY-MM-DD (e.g. 2026-04-01). Never use a datetime string when customFields is also present \u2014 the API silently discards the ticket with no error. The pattern rejects datetime strings even when the validator treats format as a non-asserting annotation."
               },
               "tags": {
                 "type": "array",
@@ -335,6 +366,13 @@
               }
             },
             "additionalProperties": false
+          },
+          "include": {
+            "type": "string",
+            "enum": [
+              "description_HTML"
+            ],
+            "description": "Set to description_HTML to return the sanitized HTML description alongside the always-present plain-text description. OpenAPI 1.1.0; retained even when select is present."
           }
         },
         "additionalProperties": false
@@ -342,7 +380,7 @@
     },
     {
       "name": "update_ticket_status",
-      "description": "Update ticket status with optional resolution and comment",
+      "description": "Move a ticket to a valid next workflow state (status/workflow transition)",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -368,11 +406,11 @@
           },
           "status": {
             "type": "string",
-            "description": "Target workflow status label. Built-in values include Open, Reopened, Started, Resolved, and Closed, but instances may define custom workflow labels. Discover the exact allowed values for the target instance with get_instance before attempting a status change."
+            "description": "Target workflow-state ID. It must be one of the valid nextSteps for the ticket's current workflow state. Default labels: Open, Reopened, In Progress, Resolved, Closed. Custom workflows can use other values. Discover allowed transitions with get_instance or the ticket workflow in a full get_ticket payload."
           },
           "resolution": {
             "type": "string",
-            "description": "Optional resolution code recorded with the status change. Verified live: the API accepts a move to Resolved/Closed WITHOUT a resolution (HTTP 200), so it is not required — but providing one records the outcome. Canonical values: fixed, cannotResolve, cancelled. Common variants (e.g. 'canceled', 'cannot resolve') are normalized by the adapter, and instances with custom workflows may define other codes, so any non-empty string is accepted. Prefer a canonical value when supplied."
+            "description": "Optional resolution code recorded with the status change. Verified live: the API accepts a move to Resolved/Closed WITHOUT a resolution (HTTP 200), so it is not required \u2014 but providing one records the outcome. Canonical values: fixed, cannotResolve, cancelled. Common variants (e.g. 'canceled', 'cannot resolve') are normalized by the adapter, and instances with custom workflows may define other codes, so any non-empty string is accepted. Prefer a canonical value when supplied."
           },
           "comment": {
             "type": "string"
@@ -403,7 +441,7 @@
     },
     {
       "name": "update_ticket",
-      "description": "Update ticket fields such as title, assignee, priority, and custom fields",
+      "description": "Update ticket fields such as title, assignee, priority, description, and custom fields",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -436,7 +474,11 @@
               },
               "description": {
                 "type": "string",
-                "description": "Ticket description in HTML. Use <p> for paragraphs, <br> for line breaks, <strong> for bold, <u> for underline. Example: <p><strong>Summary</strong></p><p>Detail</p>"
+                "description": "Plain-text ticket description. HTML characters are escaped. If both description and description_HTML are sent, description takes precedence."
+              },
+              "description_HTML": {
+                "type": "string",
+                "description": "Sanitized HTML ticket description. Script-capable elements, event-handler attributes, and javascript: URLs are removed. Returned in responses only when include=description_HTML."
               },
               "priority": {
                 "type": "string",
@@ -481,7 +523,7 @@
                 "type": "string",
                 "format": "date",
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                "description": "Date only, format YYYY-MM-DD (e.g. 2026-04-01). Never use a datetime string when customFields is also present — the API silently discards the ticket with no error. The pattern rejects datetime strings even when the validator treats format as a non-asserting annotation."
+                "description": "Date only, format YYYY-MM-DD (e.g. 2026-04-01). Never use a datetime string when customFields is also present \u2014 the API silently discards the ticket with no error. The pattern rejects datetime strings even when the validator treats format as a non-asserting annotation."
               },
               "tags": {
                 "type": "array",
@@ -524,6 +566,13 @@
               }
             },
             "additionalProperties": false
+          },
+          "include": {
+            "type": "string",
+            "enum": [
+              "description_HTML"
+            ],
+            "description": "Set to description_HTML to return the sanitized HTML description alongside the always-present plain-text description. OpenAPI 1.1.0; retained even when select is present."
           }
         },
         "additionalProperties": false
@@ -531,7 +580,7 @@
     },
     {
       "name": "add_comment",
-      "description": "Add a comment to a ticket",
+      "description": "Add a comment to a ticket. Use isPrivate=true for an internal agent note not visible to the requestor; false (default) for a requestor-visible update.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -556,12 +605,17 @@
             "type": "string"
           },
           "comment": {
-            "type": "string"
+            "type": "string",
+            "description": "Plain-text comment. HTML characters are escaped. If both comment and comment_HTML are sent, comment takes precedence."
+          },
+          "comment_HTML": {
+            "type": "string",
+            "description": "Sanitized HTML comment. Script-capable content is removed. Returned in the created activity only when include=comment_HTML."
           },
           "isPrivate": {
             "type": "boolean",
             "default": false,
-            "description": "When true, posts an internal/private comment not visible to the requestor. Verified live: the API honors this on comment creation even though the OpenAPI insertCommentRequest schema omits it. Defaults to a public comment."
+            "description": "When true, posts an internal/private comment visible only to internal agents, not the requestor. Documented in OpenAPI 1.1.0 insertCommentRequest (default false). Verified live."
           },
           "user": {
             "type": "object",
@@ -582,6 +636,13 @@
               }
             },
             "additionalProperties": false
+          },
+          "include": {
+            "type": "string",
+            "enum": [
+              "comment_HTML"
+            ],
+            "description": "Set to comment_HTML to include sanitized HTML in comment_HTML while comment remains plain text. OpenAPI 1.1.0."
           }
         },
         "additionalProperties": false
@@ -589,7 +650,7 @@
     },
     {
       "name": "get_instance",
-      "description": "Get instance metadata including workflow and custom field details",
+      "description": "Get instance metadata including workflow definitions, assignees, and custom field details. Call before status changes on custom workflows and before using customFields.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -668,7 +729,7 @@
     },
     {
       "name": "find_my_unresolved_tickets",
-      "description": "List my unresolved tickets using status as primary signal with resolved compatibility hints",
+      "description": "List my unresolved IT Helpdesk tickets using status as primary signal with resolvedStatus compatibility hints",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -737,7 +798,7 @@
     },
     {
       "name": "find_my_tickets_with_unread_updates",
-      "description": "List my tickets that have unread updates based on unseen event counters",
+      "description": "List my IT Helpdesk tickets that have unread updates based on unseen event counters (tickets that need attention)",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -830,7 +891,7 @@
     },
     {
       "name": "get_ticket_attachments",
-      "description": "List all attachments for a ticket.",
+      "description": "List all attachments for a ticket (screenshots, logs, links).",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -858,7 +919,7 @@
     },
     {
       "name": "get_activity_attachments",
-      "description": "List attachments for a specific activity. The activityId must come from item.activityId in the add_ticket_attachment_links response — not from get_ticket_activities. Passing an activityId from get_ticket_activities returns a 500 error.",
+      "description": "List attachments for a specific activity. The activityId must come from item.activityId in the add_ticket_attachment_links response \u2014 not from get_ticket_activities. Passing an activityId from get_ticket_activities returns a 500 error.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -887,7 +948,7 @@
     },
     {
       "name": "add_ticket_attachment_links",
-      "description": "Add attachment links to a ticket activity.",
+      "description": "Add HTTPS link attachments to a ticket. For an internal-only attachment activity, set isPrivate=true. File binary upload (multipart) is supported by the API but not by this tool \u2014 use link attachments here.",
       "inputSchema": {
         "type": "object",
         "required": [
@@ -912,7 +973,12 @@
             "type": "string"
           },
           "comment": {
-            "type": "string"
+            "type": "string",
+            "description": "Plain-text comment shown with the attachments. Takes precedence over comment_HTML. OpenAPI requires comment or comment_HTML."
+          },
+          "comment_HTML": {
+            "type": "string",
+            "description": "Sanitized HTML comment shown with the attachments. Returned when include=comment_HTML."
           },
           "attachments": {
             "type": "array",
@@ -937,7 +1003,8 @@
           },
           "isPrivate": {
             "type": "boolean",
-            "default": false
+            "default": false,
+            "description": "When true, the attachment activity is private to internal agents. Documented in OpenAPI 1.1.0 insertAttachmentLinkRequest (required there; this tool defaults to false)."
           },
           "user": {
             "type": "object",
@@ -958,6 +1025,13 @@
               }
             },
             "additionalProperties": false
+          },
+          "include": {
+            "type": "string",
+            "enum": [
+              "comment_HTML"
+            ],
+            "description": "Set to comment_HTML to include sanitized HTML in comment_HTML while comment remains plain text. OpenAPI 1.1.0."
           }
         },
         "additionalProperties": false

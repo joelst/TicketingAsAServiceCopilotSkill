@@ -310,12 +310,14 @@ export class TicketingApiAdapter {
       search: input.search,
       title: input.title,
       status: input.status,
+      statusId: input.statusId,
       priority: input.priority,
       isResolved: normalizeIsResolved(input.isResolved),
       tags: input.tags,
       orderBy: input.orderBy,
       order: input.order,
       select: input.select,
+      include: input.include,
       offset: input.offset,
       limit: input.limit,
       createdAfter: input.createdAfter,
@@ -361,7 +363,8 @@ export class TicketingApiAdapter {
       method: 'GET',
       path: `/tickets/${encodeURIComponent(input.ticketId)}`,
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       }
     }).then((response) => ({
       data: {
@@ -383,7 +386,8 @@ export class TicketingApiAdapter {
       path: `/tickets/${encodeURIComponent(input.ticketId)}/activities`,
       query: {
         timezone: input.timezone,
-        limit: input.limit
+        limit: input.limit,
+        include: input.include
       },
       headers
     }).then((response) => {
@@ -410,7 +414,8 @@ export class TicketingApiAdapter {
       method: 'POST',
       path: '/tickets',
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       },
       body: {
         ticket: input.ticket,
@@ -442,7 +447,8 @@ export class TicketingApiAdapter {
       method: 'PUT',
       path: `/tickets/${encodeURIComponent(input.ticketId)}`,
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       },
       body: {
         ticket: input.ticket,
@@ -457,13 +463,15 @@ export class TicketingApiAdapter {
       method: 'POST',
       path: `/tickets/${encodeURIComponent(input.ticketId)}/activities`,
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       },
       body: {
         comment: input.comment,
+        comment_HTML: input.comment_HTML,
         user: input.user,
-        // Verified live: the API honors isPrivate on comment creation even though the
-        // OpenAPI insertCommentRequest schema omits it. Defaults to a public comment.
+        // OpenAPI 1.1.0 insertCommentRequest documents isPrivate (default false).
+        // Verified live: a comment posted with isPrivate: true reads back private.
         isPrivate: input.isPrivate ?? false
       }
     });
@@ -521,10 +529,12 @@ export class TicketingApiAdapter {
       method: 'POST',
       path: `/tickets/${encodeURIComponent(input.ticketId)}/attachments`,
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       },
       body: {
         comment: input.comment,
+        comment_HTML: input.comment_HTML,
         attachments: input.attachments,
         user: input.user,
         isPrivate: input.isPrivate ?? false

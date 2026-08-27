@@ -30,7 +30,7 @@
   },
   {
     "id": "create-ticket-missing-user-followup",
-    "prompt": "Create a ticket in APAC with title Printer is down for Alex Wong",
+    "prompt": "Intake an IT helpdesk ticket in APAC with title Printer is down for Alex Wong",
     "expectedTool": "create_ticket",
     "expectFollowUpForMissingFields": [
       "ticket.requestor.id",
@@ -54,7 +54,7 @@
   },
   {
     "id": "reassign-ticket",
-    "prompt": "Reassign ticket 11111111-2222-3333-4444-555555555555 to Jordan Lee in US",
+    "prompt": "Assign ticket 11111111-2222-3333-4444-555555555555 to Jordan Lee in US",
     "expectedTool": "update_ticket",
     "mustIncludeInputShape": {
       "ticket": [
@@ -65,7 +65,7 @@
   },
   {
     "id": "add-comment",
-    "prompt": "Add comment to ticket 11111111-2222-3333-4444-555555555555 saying customer confirmed the fix",
+    "prompt": "Add a requestor-visible comment to ticket 11111111-2222-3333-4444-555555555555 saying customer confirmed the fix",
     "expectedTool": "add_comment",
     "mustIncludeInput": {
       "comment": "customer confirmed the fix"
@@ -113,7 +113,7 @@
   },
   {
     "id": "find-my-unread-updates",
-    "prompt": "Find my tickets with unread updates in US",
+    "prompt": "Show IT tickets that need my attention with unread updates in US",
     "expectedTool": "find_my_tickets_with_unread_updates",
     "mustIncludeInput": {
       "region": "us"
@@ -133,25 +133,68 @@
   {
     "id": "error-401",
     "prompt": "List tickets in US",
-    "simulatedError": { "statusCode": 401 },
+    "simulatedError": {
+      "statusCode": 401
+    },
     "expectedBehavior": "explain_api_key_invalid_or_expired"
   },
   {
     "id": "error-403",
     "prompt": "Close ticket 11111111-2222-3333-4444-555555555555 in US",
-    "simulatedError": { "statusCode": 403 },
+    "simulatedError": {
+      "statusCode": 403
+    },
     "expectedBehavior": "explain_api_key_lacks_write_permission"
   },
   {
     "id": "error-429",
     "prompt": "Pull all tickets with no limit in US",
-    "simulatedError": { "statusCode": 429 },
+    "simulatedError": {
+      "statusCode": 429
+    },
     "expectedBehavior": "suggest_retry_and_reduce_query_scope"
   },
   {
     "id": "error-404",
     "prompt": "Get ticket 11111111-2222-3333-4444-555555555555 in US",
-    "simulatedError": { "statusCode": 404 },
+    "simulatedError": {
+      "statusCode": 404
+    },
     "expectedBehavior": "state_ticket_not_found_in_region"
+  },
+  {
+    "id": "helpdesk-intake",
+    "prompt": "Intake a new IT helpdesk ticket in US titled VPN cannot connect",
+    "expectedTool": "create_ticket",
+    "mustIncludeInput": {
+      "region": "us"
+    },
+    "expectFollowUpForMissingFields": [
+      "ticket.requestor.id",
+      "ticket.requestor.name",
+      "ticket.requestor.email",
+      "user.id",
+      "user.name",
+      "user.email"
+    ],
+    "requiresConfirmation": true
+  },
+  {
+    "id": "private-internal-comment",
+    "prompt": "Add a private internal note to ticket 11111111-2222-3333-4444-555555555555 saying checking with vendor, do not show this to the requestor",
+    "expectedTool": "add_comment",
+    "mustIncludeInput": {
+      "isPrivate": true
+    },
+    "requiresConfirmation": true
+  },
+  {
+    "id": "list-in-progress-statusid",
+    "prompt": "List In Progress helpdesk tickets in US using an exact workflow-state match",
+    "expectedTool": "list_tickets",
+    "mustIncludeInput": {
+      "region": "us",
+      "statusId": "In Progress"
+    }
   }
 ]

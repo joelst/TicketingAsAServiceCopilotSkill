@@ -7,5 +7,4 @@ node_modules/
 temp/
 *.swagger-downloaded.json
 .publish-connectors.defaults.json
-docs/ticketing-api.openapi.json
 test-*.ps1

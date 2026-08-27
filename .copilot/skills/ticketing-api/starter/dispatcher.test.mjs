@@ -886,3 +886,111 @@ test('find_my_unresolved_tickets classifies custom statuses by resolvedStatus ar
   assert.equal(result.data.items[0].status, 'In Progress');
   assert.deepEqual(result.data.items[0].resolvedStatus, ['Resolved', 'Closed']);
 });
+
+test('list_tickets defaults include=description_HTML in full mode and passes explicit include', async () => {
+  const includes = [];
+  const adapter = createAdapterStub({
+    listTickets: async (input) => {
+      includes.push(input.include);
+      return { data: { items: [] }, meta: { statusCode: 200 } };
+    }
+  });
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  await dispatch('list_tickets', { region: 'us', mode: 'full' });
+  await dispatch('list_tickets', { region: 'us', mode: 'summary' });
+  await dispatch('list_tickets', { region: 'us', include: 'description_HTML' });
+
+  assert.equal(includes[0], 'description_HTML');
+  assert.equal(includes[1], undefined);
+  assert.equal(includes[2], 'description_HTML');
+});
+
+test('get_ticket full mode requests description_HTML and activity comment_HTML', async () => {
+  const ticketIncludes = [];
+  const activityIncludes = [];
+  const adapter = createAdapterStub({
+    getTicket: async (input) => {
+      ticketIncludes.push(input.include);
+      return { data: { ticket: { id: 't1', title: 'VPN', status: 'Open' } }, meta: { statusCode: 200 } };
+    },
+    getTicketActivities: async (input) => {
+      activityIncludes.push(input.include);
+      return { data: { items: [], itemCount: 0 }, meta: { statusCode: 200 } };
+    }
+  });
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  await dispatch('get_ticket', { region: 'us', ticketId: 't1', mode: 'full' });
+  await dispatch('get_ticket', { region: 'us', ticketId: 't1', mode: 'summary' });
+
+  assert.equal(ticketIncludes[0], 'description_HTML');
+  assert.equal(activityIncludes[0], 'comment_HTML');
+  assert.equal(ticketIncludes[1], undefined);
+  assert.equal(activityIncludes.length, 1);
+});
+
+test('get_ticket_activities defaults include=comment_HTML in full mode', async () => {
+  const includes = [];
+  const adapter = createAdapterStub({
+    getTicketActivities: async (input) => {
+      includes.push(input.include);
+      return { data: { items: [] }, meta: { statusCode: 200 } };
+    }
+  });
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+
+  await dispatch('get_ticket_activities', { region: 'us', ticketId: 't1', mode: 'full' });
+  await dispatch('get_ticket_activities', { region: 'us', ticketId: 't1', mode: 'summary' });
+
+  assert.equal(includes[0], 'comment_HTML');
+  assert.equal(includes[1], undefined);
+});
+
+test('ticket shape prefers description_HTML for rawHtml and exposes workflow in full mode', async () => {
+  const adapter = createAdapterStub({
+    getTicket: async () => ({
+      data: {
+        ticket: {
+          id: 't1',
+          title: 'VPN down',
+          status: 'Open',
+          description: 'plain description',
+          description_HTML: '<p>plain description</p>',
+          isCustomWorkflow: false,
+          workflow: [{ id: 'Open', label: 'Open', nextSteps: [] }]
+        }
+      },
+      meta: { statusCode: 200 }
+    })
+  });
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket', { region: 'us', ticketId: 't1', mode: 'full' });
+
+  assert.equal(result.data.ticket.description.rawHtml, '<p>plain description</p>');
+  assert.equal(result.data.ticket.description.plainText, 'plain description');
+  assert.equal(result.data.ticket.isCustomWorkflow, false);
+  assert.equal(result.data.ticket.workflow[0].id, 'Open');
+});
+
+test('activity shape prefers comment_HTML for rawHtml', async () => {
+  const adapter = createAdapterStub({
+    getTicketActivities: async () => ({
+      data: {
+        items: [{
+          id: 'a1',
+          comment: 'restarted wifi',
+          comment_HTML: '<p>restarted wifi</p>',
+          isPrivate: false
+        }]
+      },
+      meta: { statusCode: 200 }
+    })
+  });
+  const dispatch = createToolDispatcher({ apiKey: 'test-key', defaultRegion: 'us', adapter });
+  const result = await dispatch('get_ticket_activities', { region: 'us', ticketId: 't1', mode: 'full' });
+
+  assert.equal(result.data.items[0].comment.rawHtml, '<p>restarted wifi</p>');
+  assert.equal(result.data.items[0].comment.plainText, 'restarted wifi');
+  assert.equal(result.data.items[0].isPrivate, false);
+});

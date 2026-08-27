@@ -495,3 +495,121 @@ test('request sends numeric timezone 0 (UTC) instead of dropping it as falsy', a
 
   assert.equal(captured.url.searchParams.get('timezone'), '0');
 });
+
+test('listTickets forwards statusId and include query params', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.listTickets({
+    region: 'us',
+    timezone: '-5',
+    statusId: 'In Progress',
+    include: 'description_HTML',
+    limit: 10
+  });
+
+  assert.equal(captured.url.searchParams.get('statusId'), 'In Progress');
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+  assert.equal(captured.url.searchParams.get('key'), 'secret-key');
+});
+
+test('getTicket forwards include=description_HTML', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { item: { id: 't1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.getTicket({
+    region: 'us',
+    ticketId: 't1',
+    timezone: '-5',
+    include: 'description_HTML'
+  });
+
+  assert.ok(captured.url.pathname.endsWith('/tickets/t1'));
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+});
+
+test('getTicketActivities forwards include=comment_HTML and limit', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.getTicketActivities({
+    region: 'us',
+    ticketId: 't1',
+    timezone: '-5',
+    include: 'comment_HTML',
+    limit: 25
+  });
+
+  assert.ok(captured.url.pathname.endsWith('/tickets/t1/activities'));
+  assert.equal(captured.url.searchParams.get('include'), 'comment_HTML');
+  assert.equal(captured.url.searchParams.get('limit'), '25');
+});
+
+test('createTicket and updateTicket forward include=description_HTML', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(201, { item: { id: 't1' } }),
+    createJsonResponse(200, { item: { id: 't1' } })
+  ], 0);
+  const captured = captureRequest(adapter);
+  const user = { id: 'u1', name: 'User', email: 'user@example.com' };
+
+  await adapter.createTicket({
+    region: 'us',
+    timezone: '-5',
+    include: 'description_HTML',
+    ticket: { title: 'Laptop request', requestor: user },
+    user
+  });
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+  assert.equal(captured.init.method, 'POST');
+
+  await adapter.updateTicket({
+    region: 'us',
+    ticketId: 't1',
+    timezone: '-5',
+    include: 'description_HTML',
+    ticket: { title: 'Updated title' },
+    user
+  });
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+  assert.equal(captured.init.method, 'PUT');
+});
+
+test('addComment forwards include=comment_HTML and comment_HTML body', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { id: 'c1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addComment({
+    region: 'us',
+    ticketId: 't-1',
+    timezone: '-5',
+    include: 'comment_HTML',
+    comment: 'hello',
+    comment_HTML: '<p>hello</p>',
+    user: { id: 'u1', name: 'User', email: 'user@example.com' },
+    isPrivate: true
+  });
+
+  assert.equal(captured.url.searchParams.get('include'), 'comment_HTML');
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.comment, 'hello');
+  assert.equal(body.comment_HTML, '<p>hello</p>');
+  assert.equal(body.isPrivate, true);
+});
+
+test('addTicketAttachmentLinks forwards include=comment_HTML', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { activityId: 'act-1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addTicketAttachmentLinks({
+    region: 'us',
+    ticketId: 't-1',
+    timezone: '-5',
+    include: 'comment_HTML',
+    comment: 'see attached',
+    attachments: [{ src: 'https://example.test/a.png', caption: 'a' }],
+    user: { id: 'u1', name: 'User', email: 'user@example.com' }
+  });
+
+  assert.equal(captured.url.searchParams.get('include'), 'comment_HTML');
+});

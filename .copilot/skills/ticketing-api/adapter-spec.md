@@ -4,6 +4,8 @@
 
 Provide one transport module that all tools use so auth, region, timezone, and error handling are consistent.
 
+Canonical HTTP contract: Ticketing Public API **1.1.0** (`docs/ticketing-api.openapi.json`).
+
 ## Base routing
 
 - us host: https://teamswork.azure-api.net
@@ -23,7 +25,7 @@ Provide one transport module that all tools use so auth, region, timezone, and e
 - get_tags -> GET /tags
 - get_ticket_attachments -> GET /tickets/{ticketId}/attachments
 - get_activity_attachments -> GET /tickets/activity/{activityId}/attachments
-- add_ticket_attachment_links -> POST /tickets/{ticketId}/attachments
+- add_ticket_attachment_links -> POST /tickets/{ticketId}/attachments (application/json link attachments)
 
 Composite tools (built on the endpoints above, no new routes):
 
@@ -31,17 +33,26 @@ Composite tools (built on the endpoints above, no new routes):
 - find_my_unresolved_tickets -> paginated list_tickets with client-side filtering
 - find_my_tickets_with_unread_updates -> paginated list_tickets with client-side filtering
 
+OpenAPI 1.1.0 POST `/tickets/{ticketId}/attachments` also accepts `multipart/form-data` file uploads (`insertAttachmentMultipartRequest`). The skill tool remains JSON link attachments only.
+
 ## Request handling
 
-- Always append `key` as a query parameter from connection secret. This API does not use the standard `Ocp-Apim-Subscription-Key` header — the gateway returns 401 for header-based auth.
-- Add timezone query value when present in tool input.
+- Always append `key` as a query parameter from connection secret. OpenAPI 1.1.0 security scheme `apiKey` is `in: query`, `name: key`. Per-operation `key` parameters were removed vs 1.0; the header scheme `Ocp-Apim-Subscription-Key` was also removed from 1.1.0. The working adapter still sends `?key=` only — this API does not use `Ocp-Apim-Subscription-Key` (the gateway returns 401 for header-based auth).
+- Add timezone query value when present in tool input. Keep sending it even on operations where 1.1.0 omits timezone from documented parameters (for example GET/POST activities) so session timezone stays consistent.
 - If timezone is omitted, use connection default timezone when configured.
-- Preserve header continuationToken for pagination in list_tickets.
+- Preserve header continuationToken for pagination in list_tickets and get_ticket_activities.
+- Forward `include` when provided:
+  - `description_HTML` on GET/POST /tickets and GET/PUT /tickets/{ticketId}
+  - `comment_HTML` on GET/POST /tickets/{ticketId}/activities and POST /tickets/{ticketId}/attachments
+- Forward `statusId` on GET /tickets for an exact workflow-state match. `status` remains the legacy resolved-state filter.
 
 ## Response handling
 
-- Pass through API envelope fields such as item, items, message, error.
-- For list_tickets, also return continuation token from response header.
+- Pass through API envelope fields such as item, items, message, error (see `ITicketResponse` / `IErrorResponse`).
+- For list_tickets and get_ticket_activities, also return continuation token from response header or body.
+- Ticket `description` is plain text; HTML is in `description_HTML` only when requested via `include`.
+- Activity `comment` is plain text; HTML is in `comment_HTML` only when requested via `include`.
+- Prefer `description_HTML` / `comment_HTML` for shaped `rawHtml` when present.
 
 ## Error normalization
 
@@ -73,13 +84,15 @@ Implementation note:
 
 ## Known field name risks
 
-The `select` parameter uses field names from the API's documented list (`id`, `ticketId`, `createdOn`, etc.). The dispatcher's select strings also use `ticketNo`, `lastInteraction`, `assigneeUnseenEventCnt`, and `requestorUnseenEventCnt` — these are not in the public OpenAPI docs and may be undocumented extensions. If they are absent from API responses the practical tools (`find_my_*`) will silently return null for those fields. Verify against a live instance when first deploying.
+The `select` parameter uses field names from the API's documented list (`id`, `ticketId`, `title`, `description`, `status`, `requestor`, `customFields`, `priority`, `assignee`, `expectedDate`, `resolution`, `firstResponseOn`, `firstResolutionOn`, `lastResolutionOn`, `createdOn`, `tags`, `lastUpdatedOn`, `isFrtEscalated`, `isRtEscalated`, `createdBy`, `lastUpdatedBy`, `lastResolutionComment`). Use `include=description_HTML` for HTML; include fields are retained even when select is present.
+
+The dispatcher's select strings also use `ticketNo`, `lastInteraction`, `assigneeUnseenEventCnt`, and `requestorUnseenEventCnt`. OpenAPI 1.1.0 `ITicket` now documents `ticketNo`, `assigneeUnseenEventCnt`, and `requestorUnseenEventCnt`, and `lastInteraction` is a documented `orderBy` value, but those names are still absent from the GET /tickets `select` list. If they are absent from API responses the practical tools (`find_my_*`) will silently return null for those fields. Verify against a live instance when first deploying.
 
 Do not name `resolvedStatus` in a list `select`: the gateway returns 500 (verified live in the `us` region). It is returned by default in list payloads and in full single-ticket payloads, so read it from there instead of selecting it.
 
-`resolvedStatus` is an array of workflow status labels (verified live, e.g. `["Resolved","Closed"]`), not the string resolution code the OpenAPI spec implies. `toTicketShape` preserves the array (or null), and `isResolvedCompatible` treats a ticket as resolved when its current `status` appears in that array.
+`resolvedStatus` is an array of workflow status labels (verified live, e.g. `["Resolved","Closed"]`). OpenAPI 1.1.0 documents it as an array of strings. `toTicketShape` preserves the array (or null), and `isResolvedCompatible` treats a ticket as resolved when its current `status` appears in that array.
 
-`add_comment` (POST /tickets/{id}/activities) accepts `isPrivate` in the request body and honors it (verified live: a comment posted with `isPrivate: true` reads back private, `false` reads back public), even though the OpenAPI `insertCommentRequest` schema omits the field. The adapter sends `isPrivate` (default false); shaped activities surface it.
+`add_comment` (POST /tickets/{id}/activities) accepts `isPrivate` in the request body. OpenAPI 1.1.0 `insertCommentRequest` documents the field (default false). Verified live: a comment posted with `isPrivate: true` reads back private, `false` reads back public. The adapter sends `isPrivate` (default false); shaped activities surface it.
 
 `resolution` on update_ticket_status is optional, not required for Resolved/Closed (verified live: HTTP 200 without it). Do not enforce it in the schema.
 

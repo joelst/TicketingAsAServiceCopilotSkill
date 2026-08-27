@@ -73,6 +73,8 @@ Read tools (list_tickets, get_ticket, get_instance, get_tags, get_ticket_attachm
 ## Known limitations
 
 - `itemCount` in list responses is the page item count, not the total across all pages. Inspect `continuationToken` to determine whether more pages exist.
-- `defaultTimezone` is effectively required in the adapter config — the API marks `timezone` as a required parameter on every endpoint. If omitted the API uses its own server default, which may differ from the user's local time.
+- `defaultTimezone` is effectively required in the adapter config. OpenAPI 1.1.0 still requires `timezone` on most operations; a few (GET/POST activities, GET /tags) omit it, but the adapter continues to send it when configured. If omitted the API uses its own server default, which may differ from the user's local time.
 - The `activityId` parameter for `get_activity_attachments` must come from `item.activityId` in the `add_ticket_attachment_links` response. Passing an activityId sourced from `get_ticket_activities` returns a 500 error.
-- This API does not accept `Ocp-Apim-Subscription-Key` as a request header despite what the OpenAPI spec implies. Authentication is via `?key=` query parameter only.
+- Authentication is the Ticketing instance API key as query parameter key (?key=). OpenAPI 1.1.0 documents this as security scheme piKey (in: query). Do not send Ocp-Apim-Subscription-Key - the gateway returns 401 for header-based auth.
+- OpenAPI 1.1.0 include query: description_HTML on ticket reads/writes, comment_HTML on activity and attachment-activity operations.
+- isPrivate is documented on comment and attachment create requests in OpenAPI 1.1.0 (internal vs requestor-visible).
