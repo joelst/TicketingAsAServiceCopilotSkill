@@ -60,6 +60,8 @@ function buildCanonicalError (response, body, retryable) {
     canonicalType = 'validation_error';
   } else if (status === 401) {
     canonicalType = 'auth_error';
+  } else if (status === 403) {
+    canonicalType = 'forbidden';
   } else if (status === 404) {
     canonicalType = 'not_found';
   } else if (status === 429) {
@@ -121,6 +123,62 @@ async function parseJsonSafe (response) {
   }
 }
 
+function normalizeSingleItemPayload (payload) {
+  if (!payload || typeof payload !== 'object') {
+    return {};
+  }
+
+  if (payload.item && typeof payload.item === 'object') {
+    return payload.item;
+  }
+
+  if (payload.ticket && typeof payload.ticket === 'object') {
+    return payload.ticket;
+  }
+
+  return payload;
+}
+
+function normalizeCollectionPayload (payload) {
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      itemCount: payload.length,
+      continuationToken: undefined
+    };
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return {
+      items: [],
+      itemCount: 0,
+      continuationToken: undefined
+    };
+  }
+
+  if (Array.isArray(payload.items)) {
+    return {
+      items: payload.items,
+      itemCount: Number.isFinite(Number(payload.itemCount)) ? Number(payload.itemCount) : payload.items.length,
+      continuationToken: payload.continuationToken
+    };
+  }
+
+  if (payload.item && typeof payload.item === 'object') {
+    return {
+      items: [payload.item],
+      itemCount: 1,
+      continuationToken: payload.continuationToken
+    };
+  }
+
+  return {
+    items: [],
+    itemCount: Number.isFinite(Number(payload.itemCount)) ? Number(payload.itemCount) : 0,
+    continuationToken: payload.continuationToken
+  };
+}
+
 export class TicketingApiAdapter {
   constructor(config) {
     if (!config || !config.apiKey) {
@@ -158,10 +216,11 @@ export class TicketingApiAdapter {
     const host = this.resolveHost(region);
     const url = new URL(`${host}${BASE_PATH}${path}`);
 
-    url.searchParams.set('key', this.apiKey);
-
-    const timezone = query.timezone || this.defaultTimezone;
-    if (timezone) {
+    const hasTimezone = query.timezone !== undefined && query.timezone !== null && query.timezone !== '';
+    const timezone = hasTimezone ? query.timezone : this.defaultTimezone;
+    // Explicit emptiness check: numeric 0 (UTC) is a valid offset but falsy, so it must not
+    // be dropped or fall through to the server default.
+    if (timezone !== undefined && timezone !== null && timezone !== '') {
       url.searchParams.set('timezone', String(timezone));
     }
 
@@ -173,6 +232,8 @@ export class TicketingApiAdapter {
         url.searchParams.set(queryKey, String(value));
       }
     }
+
+    url.searchParams.set('key', this.apiKey);
 
     const requestInit = {
       method,
@@ -249,12 +310,14 @@ export class TicketingApiAdapter {
       search: input.search,
       title: input.title,
       status: input.status,
+      statusId: input.statusId,
       priority: input.priority,
       isResolved: normalizeIsResolved(input.isResolved),
       tags: input.tags,
       orderBy: input.orderBy,
       order: input.order,
       select: input.select,
+      include: input.include,
       offset: input.offset,
       limit: input.limit,
       createdAfter: input.createdAfter,
@@ -276,6 +339,21 @@ export class TicketingApiAdapter {
       path: '/tickets',
       query,
       headers
+    }).then((response) => {
+      const normalized = normalizeCollectionPayload(response.data);
+      const token = response.meta.continuationToken || normalized.continuationToken;
+
+      return {
+        data: {
+          items: normalized.items,
+          itemCount: normalized.itemCount,
+          continuationToken: token || null
+        },
+        meta: {
+          ...response.meta,
+          continuationToken: token || null
+        }
+      };
     });
   }
 
@@ -285,8 +363,48 @@ export class TicketingApiAdapter {
       method: 'GET',
       path: `/tickets/${encodeURIComponent(input.ticketId)}`,
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       }
+    }).then((response) => ({
+      data: {
+        ticket: normalizeSingleItemPayload(response.data)
+      },
+      meta: response.meta
+    }));
+  }
+
+  getTicketActivities (input) {
+    const headers = {};
+    if (input.continuationToken) {
+      headers.continuationToken = input.continuationToken;
+    }
+
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: `/tickets/${encodeURIComponent(input.ticketId)}/activities`,
+      query: {
+        timezone: input.timezone,
+        limit: input.limit,
+        include: input.include
+      },
+      headers
+    }).then((response) => {
+      const normalized = normalizeCollectionPayload(response.data);
+      const token = response.meta.continuationToken || normalized.continuationToken;
+
+      return {
+        data: {
+          items: normalized.items,
+          itemCount: normalized.itemCount,
+          continuationToken: token || null
+        },
+        meta: {
+          ...response.meta,
+          continuationToken: token || null
+        }
+      };
     });
   }
 
@@ -296,7 +414,8 @@ export class TicketingApiAdapter {
       method: 'POST',
       path: '/tickets',
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       },
       body: {
         ticket: input.ticket,
@@ -328,7 +447,8 @@ export class TicketingApiAdapter {
       method: 'PUT',
       path: `/tickets/${encodeURIComponent(input.ticketId)}`,
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       },
       body: {
         ticket: input.ticket,
@@ -343,11 +463,16 @@ export class TicketingApiAdapter {
       method: 'POST',
       path: `/tickets/${encodeURIComponent(input.ticketId)}/activities`,
       query: {
-        timezone: input.timezone
+        timezone: input.timezone,
+        include: input.include
       },
       body: {
         comment: input.comment,
-        user: input.user
+        comment_HTML: input.comment_HTML,
+        user: input.user,
+        // OpenAPI 1.1.0 insertCommentRequest documents isPrivate (default false).
+        // Verified live: a comment posted with isPrivate: true reads back private.
+        isPrivate: input.isPrivate ?? false
       }
     });
   }
@@ -359,6 +484,60 @@ export class TicketingApiAdapter {
       path: '/instance',
       query: {
         timezone: input.timezone
+      }
+    });
+  }
+
+  getTags (input) {
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: '/tags',
+      query: {
+        timezone: input.timezone
+      }
+    });
+  }
+
+  getTicketAttachments (input) {
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: `/tickets/${encodeURIComponent(input.ticketId)}/attachments`,
+      query: {
+        timezone: input.timezone
+      }
+    });
+  }
+
+  // activityId must come from item.activityId in the addTicketAttachmentLinks response.
+  // Passing an activityId from getTicketActivities returns a 500.
+  getActivityAttachments (input) {
+    return this.request({
+      region: input.region,
+      method: 'GET',
+      path: `/tickets/activity/${encodeURIComponent(input.activityId)}/attachments`,
+      query: {
+        timezone: input.timezone
+      }
+    });
+  }
+
+  addTicketAttachmentLinks (input) {
+    return this.request({
+      region: input.region,
+      method: 'POST',
+      path: `/tickets/${encodeURIComponent(input.ticketId)}/attachments`,
+      query: {
+        timezone: input.timezone,
+        include: input.include
+      },
+      body: {
+        comment: input.comment,
+        comment_HTML: input.comment_HTML,
+        attachments: input.attachments,
+        user: input.user,
+        isPrivate: input.isPrivate ?? false
       }
     });
   }

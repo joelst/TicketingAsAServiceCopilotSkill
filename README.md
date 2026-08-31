@@ -2,6 +2,8 @@
 
 Standalone repository for the [Ticketing As A Service](https://www.teamswork.app/products/microsoft-teams-ticketing/ticketingapi) Copilot skill package.
 
+The skill is framed for IT Helpdesk ticket operations (intake, assignment, private vs requestor-visible comments, workflow/status, attachments, tickets that need attention). The HTTP contract is Ticketing Public API **1.1.0**; canonical spec: docs/ticketing-api.openapi.json. Auth is the instance API key as query parameter key.
+
 ## Contents
 - `.copilot/skills/ticketing-api/SKILL.md`
 - `.copilot/skills/ticketing-api/tool-schema.json`
@@ -43,7 +45,7 @@ Using with Claude generally means reusing the same tool schema/adapter logic, th
 ## Runtime assumptions
 - Region defaults: `us` (`https://teamswork.azure-api.net/ticketing/v1`)
 - Typical timezone default: `-5`
-- Node.js runtime: Node 18+ with ESM support. CI validates on Node 18 and Node 22.
+- Node.js runtime: Node 18+ with ESM support is only needed when running the optional starter JS adapter/dispatcher utilities locally. CI validates these on Node 18 and Node 22.
 - API key is provided via environment variable:
   - `ticketingAPIKey` (preferred in current scripts)
   - `TICKETING_API_KEY` (fallback)

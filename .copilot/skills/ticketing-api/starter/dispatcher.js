@@ -5,8 +5,354 @@ const WRITE_TOOLS = new Set([
   'update_ticket',
   'update_ticket_status',
   'add_comment',
-  'validation_write_closed_ticket_comment'
+  'validation_write_closed_ticket_comment',
+  'add_ticket_attachment_links'
 ]);
+
+const LIST_TICKET_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,createdOn,lastUpdatedOn,lastInteraction,tags';
+const MY_TICKETS_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,createdOn,lastUpdatedOn,lastInteraction,firstResolutionOn,lastResolutionOn,assigneeUnseenEventCnt,requestorUnseenEventCnt,tags';
+const VALIDATION_TICKET_SELECT_FIELDS = 'id,ticketNo,title,priority,status,requestor,assignee,firstResolutionOn,lastResolutionOn';
+
+function parseTimezoneOffsetMinutes (timezone) {
+  if (typeof timezone === 'number' && Number.isFinite(timezone)) {
+    return Math.trunc(timezone * 60);
+  }
+
+  if (typeof timezone !== 'string') {
+    return null;
+  }
+
+  const trimmed = timezone.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsedNumeric = Number(trimmed);
+  if (!Number.isNaN(parsedNumeric) && Number.isFinite(parsedNumeric)) {
+    return Math.trunc(parsedNumeric * 60);
+  }
+
+  const match = /^([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3] || '0');
+
+  if (hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  return sign * ((hours * 60) + minutes);
+}
+
+function toOffsetTimestamp (value, timezone) {
+  if (!value) {
+    return value || null;
+  }
+
+  const textValue = String(value);
+  const offsetMinutes = parseTimezoneOffsetMinutes(timezone);
+  if (offsetMinutes === null) {
+    return value;
+  }
+
+  const hasExplicitTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(textValue);
+  const isNaiveIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(textValue);
+  const source = new Date(!hasExplicitTimezone && isNaiveIsoTimestamp ? `${textValue}Z` : value);
+  if (Number.isNaN(source.getTime())) {
+    return value;
+  }
+
+  const shifted = new Date(source.getTime() + (offsetMinutes * 60 * 1000));
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const offsetHours = String(Math.floor(absoluteMinutes / 60)).padStart(2, '0');
+  const offsetRemainderMinutes = String(absoluteMinutes % 60).padStart(2, '0');
+
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shifted.getUTCDate()).padStart(2, '0');
+  const hours = String(shifted.getUTCHours()).padStart(2, '0');
+  const minutes = String(shifted.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(shifted.getUTCSeconds()).padStart(2, '0');
+  const milliseconds = String(shifted.getUTCMilliseconds()).padStart(3, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}${sign}${offsetHours}:${offsetRemainderMinutes}`;
+}
+
+function toPlainText (value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const text = String(value)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return text || null;
+}
+
+function toRichText (value) {
+  if (value === undefined || value === null) {
+    return {
+      rawHtml: null,
+      plainText: null
+    };
+  }
+
+  const rawHtml = String(value);
+  return {
+    rawHtml,
+    plainText: toPlainText(rawHtml)
+  };
+}
+
+function toTicketDescription (ticket) {
+  const html = ticket && ticket.description_HTML;
+  const text = ticket && ticket.description;
+  if (html !== undefined && html !== null && html !== '') {
+    return {
+      rawHtml: String(html),
+      plainText: toPlainText(html) || (text ? String(text) : null)
+    };
+  }
+  return toRichText(text);
+}
+
+function toActivityComment (activity) {
+  const html = activity && activity.comment_HTML;
+  const text = activity && (activity.comment || activity.message);
+  if (html !== undefined && html !== null && html !== '') {
+    return {
+      rawHtml: String(html),
+      plainText: toPlainText(html) || (text ? String(text) : null)
+    };
+  }
+  return toRichText(text);
+}
+
+function toUserSummary (user) {
+  if (typeof user === 'string') {
+    return {
+      id: null,
+      name: user || null,
+      email: null
+    };
+  }
+
+  if (!user || typeof user !== 'object') {
+    return {
+      id: null,
+      name: null,
+      email: null
+    };
+  }
+
+  return {
+    id: user.id || null,
+    name: user.name || null,
+    email: user.email || null
+  };
+}
+
+function toChanges (activity) {
+  const candidates = Array.isArray(activity && activity.changes)
+    ? activity.changes
+    : [];
+
+  return candidates.map((entry) => ({
+    field: (entry && (entry.name || entry.field || entry.key)) || null,
+    oldValue: entry && Object.prototype.hasOwnProperty.call(entry, 'oldValue') ? entry.oldValue : null,
+    newValue: entry && Object.prototype.hasOwnProperty.call(entry, 'newValue') ? entry.newValue : null
+  }));
+}
+
+function normalizeActivityAction (activity, changes) {
+  const raw = (activity && (activity.action || activity.type || activity.eventType || activity.name)) || '';
+  const lowered = String(raw).trim().toLowerCase();
+
+  if (lowered.includes('start ticket') || lowered === 'started' || lowered === 'start') {
+    return { action: 'started', actionRaw: raw || null };
+  }
+  if (lowered.includes('create') || lowered === 'created') {
+    return { action: 'created', actionRaw: raw || null };
+  }
+  if (lowered.includes('edit') || lowered.includes('update') || lowered === 'edited') {
+    return { action: 'edited', actionRaw: raw || null };
+  }
+  if (lowered.includes('comment')) {
+    return { action: 'commented', actionRaw: raw || null };
+  }
+  if (Array.isArray(changes) && changes.length > 0) {
+    return { action: 'edited', actionRaw: raw || null };
+  }
+  if (activity && activity.comment) {
+    return { action: 'commented', actionRaw: raw || null };
+  }
+
+  return { action: 'unknown', actionRaw: raw || null };
+}
+
+function toAttachments (activity) {
+  const attachments = Array.isArray(activity && activity.attachments)
+    ? activity.attachments
+    : [];
+
+  return attachments.map((attachment) => ({
+    // Preserve legitimate zero-byte attachments; null only when missing/invalid.
+    size: Number.isFinite(Number(attachment && attachment.size)) ? Number(attachment.size) : null,
+    id: (attachment && (attachment.id || attachment.attachmentId)) || null,
+    name: (attachment && (attachment.name || attachment.fileName || attachment.filename || attachment.caption)) || null,
+    contentType: (attachment && attachment.contentType) || null,
+    url: (attachment && (attachment.url || attachment.downloadUrl || attachment.src)) || null
+  }));
+}
+
+function toActivitySummary (activity, timezone) {
+  const changes = toChanges(activity);
+  const { action, actionRaw } = normalizeActivityAction(activity, changes);
+  const attachments = toAttachments(activity);
+  const richComment = toActivityComment(activity);
+  const hasChanges = Array.isArray(activity && activity.changes);
+  const hasAttachments = Array.isArray(activity && activity.attachments);
+
+  return {
+    id: (activity && (activity.id || activity.activityId)) || null,
+    action,
+    actionRaw,
+    timestamp: toOffsetTimestamp((activity && (activity.createdDateTime || activity.dateCreated || activity.createdOn || activity.timestamp || activity.updatedOn)) || null, timezone),
+    user: toUserSummary(activity && (activity.createdBy || activity.author || activity.user)),
+    comment: {
+      rawHtml: richComment.rawHtml,
+      plainText: richComment.plainText
+    },
+    isPrivate: activity && typeof activity.isPrivate === 'boolean' ? activity.isPrivate : null,
+    changesCount: hasChanges ? changes.length : null,
+    attachmentsCount: hasAttachments ? attachments.length : null
+  };
+}
+
+function toActivityFull (activity, timezone) {
+  const changes = toChanges(activity);
+  const { action, actionRaw } = normalizeActivityAction(activity, changes);
+  const attachments = toAttachments(activity);
+  const richComment = toActivityComment(activity);
+
+  return {
+    id: (activity && (activity.id || activity.activityId)) || null,
+    action,
+    actionRaw,
+    timestamp: toOffsetTimestamp((activity && (activity.createdDateTime || activity.dateCreated || activity.createdOn || activity.timestamp || activity.updatedOn)) || null, timezone),
+    user: toUserSummary(activity && (activity.createdBy || activity.author || activity.user)),
+    comment: richComment,
+    isPrivate: activity && typeof activity.isPrivate === 'boolean' ? activity.isPrivate : null,
+    changes,
+    attachments
+  };
+}
+
+function toTicketShape (ticket, timezone, mode) {
+  const emptyShape = {
+    id: null,
+    ticketNo: null,
+    title: null,
+    status: null,
+    priority: null,
+    requestor: toUserSummary(null),
+    assignee: toUserSummary(null),
+    createdOn: null,
+    updatedOn: null,
+    lastInteraction: null,
+    resolvedStatus: null,
+    firstResolutionOn: null,
+    lastResolutionOn: null,
+    tags: [],
+    unseenUpdates: {
+      assignee: null,
+      requestor: null
+    },
+    attachmentsCount: null,
+    activityCount: null,
+    description: toRichText(null)
+  };
+
+  if (!ticket || typeof ticket !== 'object') {
+    if (mode === 'full') {
+      emptyShape.attachments = [];
+      emptyShape.isCustomWorkflow = null;
+      emptyShape.workflow = [];
+    }
+    return emptyShape;
+  }
+
+  const description = toTicketDescription(ticket);
+  const hasAttachments = Array.isArray(ticket.attachments);
+  const attachments = hasAttachments ? ticket.attachments : [];
+  const hasActivityCount = Object.prototype.hasOwnProperty.call(ticket, 'activityCount');
+  const numericActivityCount = Number(ticket.activityCount);
+  const hasAssigneeUnseen = Object.prototype.hasOwnProperty.call(ticket, 'assigneeUnseenEventCnt');
+  const hasRequestorUnseen = Object.prototype.hasOwnProperty.call(ticket, 'requestorUnseenEventCnt');
+  const assigneeUnseen = Number(ticket.assigneeUnseenEventCnt);
+  const requestorUnseen = Number(ticket.requestorUnseenEventCnt);
+  const tags = Array.isArray(ticket.tags)
+    ? ticket.tags.map((tag) => ({
+      tagCategoryId: (tag && tag.tagCategoryId) || null,
+      text: (tag && tag.text) || null
+    }))
+    : [];
+
+  const base = {
+    id: ticket.id || null,
+    ticketNo: ticket.ticketNo || null,
+    title: ticket.title || null,
+    status: ticket.status || null,
+    priority: ticket.priority || null,
+    requestor: toUserSummary(ticket.requestor),
+    assignee: toUserSummary(ticket.assignee),
+    createdOn: toOffsetTimestamp(ticket.createdOn || null, timezone),
+    updatedOn: toOffsetTimestamp(ticket.lastUpdatedOn || ticket.updatedOn || null, timezone),
+    lastInteraction: toOffsetTimestamp(ticket.lastInteraction || null, timezone),
+    resolvedStatus: Array.isArray(ticket.resolvedStatus) ? ticket.resolvedStatus : null,
+    firstResolutionOn: toOffsetTimestamp(ticket.firstResolutionOn || null, timezone),
+    lastResolutionOn: toOffsetTimestamp(ticket.lastResolutionOn || null, timezone),
+    tags,
+    unseenUpdates: {
+      assignee: hasAssigneeUnseen && Number.isFinite(assigneeUnseen) ? assigneeUnseen : null,
+      requestor: hasRequestorUnseen && Number.isFinite(requestorUnseen) ? requestorUnseen : null
+    },
+    attachmentsCount: hasAttachments ? attachments.length : null,
+    activityCount: hasActivityCount && Number.isFinite(numericActivityCount) ? numericActivityCount : null,
+    description
+  };
+
+  if (mode === 'full') {
+    base.attachments = attachments;
+    base.isCustomWorkflow = Object.prototype.hasOwnProperty.call(ticket, 'isCustomWorkflow')
+      ? Boolean(ticket.isCustomWorkflow)
+      : null;
+    base.workflow = Array.isArray(ticket.workflow) ? ticket.workflow : [];
+  }
+
+  return base;
+}
+
+function resolveMode (input) {
+  if (input && input.mode === 'full') {
+    return 'full';
+  }
+
+  return 'summary';
+}
 
 function isResolvedCompatible (ticket) {
   const status = ticket && ticket.status;
@@ -14,11 +360,14 @@ function isResolvedCompatible (ticket) {
     return true;
   }
 
-  const resolvedStatus = Array.isArray(ticket && ticket.resolvedStatus) ? ticket.resolvedStatus : [];
-  // Some tenants always include ['Resolved','Closed'] as policy values.
-  // Treat a ticket as resolved only when its CURRENT status is in that set.
-  if (status && resolvedStatus.includes(status)) {
-    return true;
+  // resolvedStatus is a list of workflow status labels that count as a resolved state
+  // for this ticket's (possibly custom) workflow — verified live: the API returns it as
+  // an array such as ['Resolved','Closed'], NOT a string code. Treat the ticket as
+  // resolved when its current status is one of those labels. Note: resolvedStatus is not
+  // a selectable list field (selecting it returns 500), so this branch only applies where
+  // the field is present (e.g. full single-ticket payloads).
+  if (status && Array.isArray(ticket && ticket.resolvedStatus)) {
+    return ticket.resolvedStatus.includes(status);
   }
 
   // Fallback only for payloads where status is missing.
@@ -29,17 +378,13 @@ function isResolvedCompatible (ticket) {
   return Boolean((ticket && ticket.firstResolutionOn) || (ticket && ticket.lastResolutionOn));
 }
 
-function buildValidationComment (input) {
+function buildValidationComment () {
   const stamp = new Date().toISOString();
   return [
     '### Connector Validation Note',
     '- Test type: live write-path validation',
     '- Trigger: Copilot skill validation action',
-    `- Timestamp: ${stamp}`,
-    '',
-    'Result:',
-    '- Posted via /tickets/{ticketId}/activities',
-    `- Criteria: assignee=${input.assigneeEmail}, requestor=${input.requestorEmail}`
+    `- Timestamp: ${stamp}`
   ].join('\n');
 }
 
@@ -65,6 +410,7 @@ async function listCandidateTickets (adapter, input) {
       region: input.region,
       timezone: input.timezone,
       limit,
+      select: VALIDATION_TICKET_SELECT_FIELDS,
       orderBy: 'lastInteraction',
       order: 'DESC',
       continuationToken
@@ -108,7 +454,7 @@ async function runValidationWrite (adapter, input) {
     throw new Error('No qualifying ticket found for validation action.');
   }
 
-  const comment = input.comment || buildValidationComment(input);
+  const comment = input.comment || buildValidationComment();
   const user = {
     id: target.assignee && target.assignee.id,
     name: target.assignee && target.assignee.name,
@@ -179,6 +525,7 @@ function resolveEffectiveUserEmail (input, config, toolName) {
 }
 
 async function listMyTickets (adapter, input, predicate) {
+  const mode = 'summary';
   const maxPages = Number.isInteger(input.maxPages) ? input.maxPages : 8;
   const limit = Number.isInteger(input.limit) ? input.limit : 200;
   const perspective = input.perspective || 'assignee';
@@ -194,6 +541,7 @@ async function listMyTickets (adapter, input, predicate) {
       limit,
       orderBy: input.orderBy || 'lastInteraction',
       order: input.order || 'DESC',
+      select: input.select || MY_TICKETS_SELECT_FIELDS,
       continuationToken
     });
 
@@ -229,11 +577,108 @@ async function listMyTickets (adapter, input, predicate) {
   return {
     data: {
       itemCount: clipped.length,
-      items: clipped,
+      items: clipped.map((ticket) => toTicketShape(ticket, input.timezone, mode)),
       totalMatchedBeforeTop: items.length
     },
     meta: {
       statusCode: 200
+    }
+  };
+}
+
+async function listTicketsForDisplay (adapter, input) {
+  const mode = resolveMode(input);
+  const defaultSelect = mode === 'full'
+    ? `${LIST_TICKET_SELECT_FIELDS},description`
+    : LIST_TICKET_SELECT_FIELDS;
+  const include = input.include || (mode === 'full' ? 'description_HTML' : undefined);
+  const response = await adapter.listTickets({
+    ...input,
+    select: input.select || defaultSelect,
+    include
+  });
+
+  const items = Array.isArray(response.data && response.data.items) ? response.data.items : [];
+  const itemCountValue = Number(response.data && response.data.itemCount);
+
+  return {
+    data: {
+      mode,
+      itemCount: Number.isFinite(itemCountValue) ? itemCountValue : items.length,
+      items: items.map((ticket) => toTicketShape(ticket, input.timezone, mode)),
+      continuationToken: (response.meta && response.meta.continuationToken) || null
+    },
+    meta: { ...(response.meta || {}) }
+  };
+}
+
+async function getTicketForMode (adapter, input) {
+  const mode = resolveMode(input);
+  const include = input.include || (mode === 'full' ? 'description_HTML' : undefined);
+  const ticketResponse = await adapter.getTicket({
+    ...input,
+    include
+  });
+  const ticket = ticketResponse.data && ticketResponse.data.ticket;
+  const shapedTicket = toTicketShape(ticket, input.timezone, mode);
+
+  const response = {
+    data: {
+      mode,
+      ticket: shapedTicket
+    },
+    meta: { ...(ticketResponse.meta || {}) }
+  };
+
+  if (mode !== 'full') {
+    return response;
+  }
+
+  const activityResponse = await adapter.getTicketActivities({
+    region: input.region,
+    timezone: input.timezone,
+    ticketId: input.ticketId,
+    continuationToken: input.continuationToken,
+    limit: input.limit,
+    include: 'comment_HTML'
+  });
+
+  const items = Array.isArray(activityResponse.data && activityResponse.data.items)
+    ? activityResponse.data.items
+    : [];
+  const activityItemCount = Number(activityResponse.data && activityResponse.data.itemCount);
+
+  response.data.activities = {
+    itemCount: Number.isFinite(activityItemCount) ? activityItemCount : items.length,
+    continuationToken: (activityResponse.data && activityResponse.data.continuationToken) || null,
+    items: items.map((activity) => toActivityFull(activity, input.timezone))
+  };
+  response.meta.continuationToken = activityResponse.meta && activityResponse.meta.continuationToken;
+  return response;
+}
+
+async function getTicketActivitiesForMode (adapter, input) {
+  const mode = resolveMode(input);
+  const include = input.include || (mode === 'full' ? 'comment_HTML' : undefined);
+  const response = await adapter.getTicketActivities({
+    ...input,
+    include
+  });
+  const items = Array.isArray(response.data && response.data.items) ? response.data.items : [];
+  const itemCountValue = Number(response.data && response.data.itemCount);
+  const formatter = mode === 'full' ? toActivityFull : toActivitySummary;
+
+  return {
+    data: {
+      ticketId: input.ticketId,
+      mode,
+      itemCount: Number.isFinite(itemCountValue) ? itemCountValue : items.length,
+      continuationToken: (response.data && response.data.continuationToken) || null,
+      items: items.map((activity) => formatter(activity, input.timezone))
+    },
+    meta: {
+      ...response.meta,
+      continuationToken: (response.meta && response.meta.continuationToken) || null
     }
   };
 }
@@ -289,9 +734,11 @@ export function createToolDispatcher (config) {
 
     switch (toolName) {
       case 'list_tickets':
-        return adapter.listTickets(input);
+        return listTicketsForDisplay(adapter, input);
       case 'get_ticket':
-        return adapter.getTicket(input);
+        return getTicketForMode(adapter, input);
+      case 'get_ticket_activities':
+        return getTicketActivitiesForMode(adapter, input);
       case 'create_ticket':
         return adapter.createTicket(input);
       case 'update_ticket':
@@ -302,9 +749,18 @@ export function createToolDispatcher (config) {
         return adapter.addComment(input);
       case 'get_instance':
         return adapter.getInstance(input);
+      case 'get_tags':
+        return adapter.getTags(input);
+      case 'get_ticket_attachments':
+        return adapter.getTicketAttachments(input);
+      case 'get_activity_attachments':
+        return adapter.getActivityAttachments(input);
+      case 'add_ticket_attachment_links':
+        return adapter.addTicketAttachmentLinks(input);
       case 'validation_write_closed_ticket_comment':
-        if (!input.requestorEmail) {
-          throw new Error('requestorEmail is required for validation_write_closed_ticket_comment to prevent writes against unintended tickets.');
+        if (typeof input.requestorEmail !== 'string' || !input.requestorEmail.trim() ||
+            typeof input.assigneeEmail !== 'string' || !input.assigneeEmail.trim()) {
+          throw new Error('Both requestorEmail and assigneeEmail are required (non-empty) for validation_write_closed_ticket_comment to prevent writes against unintended tickets.');
         }
         return runValidationWrite(adapter, {
           region: input.region || config.defaultRegion || 'us',

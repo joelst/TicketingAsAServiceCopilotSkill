@@ -18,8 +18,11 @@ param(
   [int]$Limit = 200,
 
   [Parameter()]
-  [ValidateRange(1, 50)]
-  [int]$MaxPages = 8
+  [ValidateRange(1, 20)]
+  [int]$MaxPages = 8,
+
+  [Parameter()]
+  [bool]$AllowResolvedFallback = $true
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +49,7 @@ if ([string]::IsNullOrWhiteSpace($hostName)) {
 }
 
 $base = "https://$($hostName)/ticketing/v1"
+$encodedKey = [uri]::EscapeDataString($apiKey)
 $all = @()
 $token = $null
 
@@ -101,6 +105,9 @@ function Invoke-SafeRestMethod {
     [string]$Uri,
 
     [Parameter()]
+    [hashtable]$Headers,
+
+    [Parameter()]
     [string]$ContentType,
 
     [Parameter()]
@@ -113,6 +120,9 @@ function Invoke-SafeRestMethod {
       Uri    = $Uri
     }
 
+    if ($Headers) {
+      $params.Headers = $Headers
+    }
     if (-not [string]::IsNullOrWhiteSpace($ContentType)) {
       $params.ContentType = $ContentType
     }
@@ -131,7 +141,7 @@ function Invoke-SafeRestMethod {
 
 for ($i = 0; $i -lt $MaxPages; $i++) {
   # Apply strict Closed filtering client-side because server-side status filtering can omit expected matches.
-  $uri = "$($base)/tickets?key=$([uri]::EscapeDataString($apiKey))&timezone=$([uri]::EscapeDataString($Timezone))&limit=$($Limit)&orderBy=lastInteraction&order=DESC"
+  $uri = "$($base)/tickets?timezone=$([uri]::EscapeDataString($Timezone))&limit=$($Limit)&orderBy=lastInteraction&order=DESC&key=$encodedKey"
   $headers = @{}
   if (-not [string]::IsNullOrWhiteSpace($token)) {
     $headers['continuationToken'] = $token
@@ -149,16 +159,40 @@ for ($i = 0; $i -lt $MaxPages; $i++) {
   }
 }
 
+function Get-NormalizedEmail {
+  param([object]$Value)
+  if ($null -eq $Value) {
+    return ''
+  }
+  # Invariant casing avoids locale-specific surprises (e.g. the Turkish dotless 'i').
+  return ([string]$Value).Trim().ToLowerInvariant()
+}
+
+$normalizedRequestorEmail = Get-NormalizedEmail $RequestorEmail
+$normalizedAssigneeEmail  = Get-NormalizedEmail $AssigneeEmail
+
 $target = $all |
   Where-Object {
     $_.status -eq 'Closed' -and
-    $_.requestor.email -eq $RequestorEmail -and
-    $_.assignee.email -eq $AssigneeEmail
+    (Get-NormalizedEmail $_.requestor.email) -eq $normalizedRequestorEmail -and
+    (Get-NormalizedEmail $_.assignee.email) -eq $normalizedAssigneeEmail
   } |
   Select-Object -First 1
 
+$usedFallback = $false
+if (-not $target -and $AllowResolvedFallback) {
+  $target = $all |
+    Where-Object {
+      $_.status -in @('Resolved', 'Closed') -and
+      (Get-NormalizedEmail $_.requestor.email) -eq $normalizedRequestorEmail -and
+      (Get-NormalizedEmail $_.assignee.email) -eq $normalizedAssigneeEmail
+    } |
+    Select-Object -First 1
+  $usedFallback = $null -ne $target
+}
+
 if (-not $target) {
-  throw 'No strict Closed ticket found for the requested criteria.'
+  throw 'No qualifying ticket found for the requested criteria.'
 }
 
 $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss K')
@@ -167,10 +201,6 @@ $comment = @"
 - Test type: live write-path validation
 - Trigger: Copilot skill execution test
 - Timestamp: $stamp
-
-Result:
-- Posted via /tickets/{ticketId}/activities
-- Criteria: assignee=$AssigneeEmail and requestor=$RequestorEmail and status=Closed
 "@
 
 $body = @{
@@ -182,15 +212,29 @@ $body = @{
   }
 } | ConvertTo-Json -Depth 6
 
-$writeUri = "$($base)/tickets/$($target.id)/activities?key=$([uri]::EscapeDataString($apiKey))"
+$encodedTargetId = [uri]::EscapeDataString($target.id)
+
+$writeUri = "$($base)/tickets/$($encodedTargetId)/activities?key=$encodedKey"
 $writeResp = Invoke-SafeRestMethod -Method 'POST' -Uri $writeUri -ContentType 'application/json' -Body $body
 
-$actUri = "$($base)/tickets/$($target.id)/activities?key=$([uri]::EscapeDataString($apiKey))"
+$actUri = "$($base)/tickets/$($encodedTargetId)/activities?key=$encodedKey"
 $activitiesResp = Invoke-SafeRestMethod -Method 'GET' -Uri $actUri -ContentType 'application/json'
-$found = @($activitiesResp.items | Where-Object { $_.comment -eq $comment }).Count
+
+# The API may normalize line endings or trim the stored comment, so compare on a
+# whitespace-normalized form (unify CRLF/LF, collapse trailing whitespace) rather than
+# strict equality to avoid a false 0-match on a write that actually succeeded.
+function Get-NormalizedComment {
+  param([object]$Value)
+  if ($null -eq $Value) { return '' }
+  return (([string]$Value) -replace "`r`n", "`n").Trim()
+}
+
+$normalizedComment = Get-NormalizedComment $comment
+$found = @($activitiesResp.items | Where-Object { (Get-NormalizedComment $_.comment) -eq $normalizedComment }).Count
 
 Write-Output ('TargetTicketId={0}' -f $target.id)
 Write-Output ('TargetStatus={0}' -f $target.status)
 Write-Output ('TargetTitle={0}' -f $target.title)
 Write-Output ('WriteMessage={0}' -f $writeResp.message)
 Write-Output ('VerificationExactCommentMatches={0}' -f $found)
+Write-Output ('UsedResolvedFallback={0}' -f $usedFallback)

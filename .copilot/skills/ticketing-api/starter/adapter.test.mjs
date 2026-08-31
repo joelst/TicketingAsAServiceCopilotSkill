@@ -183,6 +183,50 @@ test('maps 404 to not_found and marks it non-retryable', async () => {
   assert.equal(sleepCalls.length, 0);
 });
 
+test('maps 403 to forbidden and marks it non-retryable', async () => {
+  const { adapter, getCallCount, sleepCalls } = createAdapterWithQueue([
+    createJsonResponse(403, { message: 'forbidden' })
+  ], 2);
+
+  await assert.rejects(
+    adapter.request({
+      region: 'us',
+      method: 'PUT',
+      path: '/tickets/abc/status'
+    }),
+    (error) => {
+      assert.equal(getCallCount(), 1);
+      assert.ok(error instanceof TicketingApiError);
+      assert.equal(error.statusCode, 403);
+      assert.equal(error.canonicalType, 'forbidden');
+      assert.equal(error.retryable, false);
+      return true;
+    }
+  );
+
+  assert.equal(sleepCalls.length, 0);
+});
+
+test('sends key as query param and does not send Ocp-Apim-Subscription-Key header', async () => {
+  let capturedUrl;
+  let capturedHeaders;
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, { items: [] })
+  ], 0);
+
+  const originalFetch = adapter.fetchImpl;
+  adapter.fetchImpl = async (url, init) => {
+    capturedUrl = url;
+    capturedHeaders = init.headers;
+    return originalFetch(url, init);
+  };
+
+  await adapter.request({ region: 'us', method: 'GET', path: '/tickets' });
+
+  assert.equal(capturedUrl.searchParams.get('key'), 'secret-key');
+  assert.equal(Object.prototype.hasOwnProperty.call(capturedHeaders, 'Ocp-Apim-Subscription-Key'), false);
+});
+
 test('does not set Content-Type for GET requests without body and sets Accept', async () => {
   let capturedInit;
   const { adapter } = createAdapterWithQueue([
@@ -250,4 +294,322 @@ test('updateTicketStatus passes through unknown resolution values unchanged', as
   });
 
   assert.equal(capturedBody.resolution, 'customWorkflowOutcome');
+});
+
+test('getTicket normalizes direct object payload to data.ticket', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, { id: 't1', ticketNo: 'INC-1', title: 'Issue' })
+  ], 0);
+
+  const result = await adapter.getTicket({
+    region: 'us',
+    ticketId: 't1'
+  });
+
+  assert.equal(result.data.ticket.id, 't1');
+  assert.equal(result.data.ticket.ticketNo, 'INC-1');
+});
+
+test('getTicket unwraps ticket-wrapped payload to data.ticket', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, {
+      ticket: { id: 't2', ticketNo: 1002, title: 'Wrapped issue' }
+    })
+  ], 0);
+
+  const result = await adapter.getTicket({
+    region: 'us',
+    ticketId: 't2'
+  });
+
+  assert.equal(result.data.ticket.id, 't2');
+  assert.equal(result.data.ticket.ticketNo, 1002);
+  assert.equal(result.data.ticket.title, 'Wrapped issue');
+});
+
+test('getTicketActivities returns continuationToken from body when header is absent', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, {
+      items: [{ id: 'a1', action: 'commented' }],
+      itemCount: 1,
+      continuationToken: 'body-token'
+    })
+  ], 0);
+
+  const result = await adapter.getTicketActivities({
+    region: 'us',
+    ticketId: 't1',
+    limit: 50
+  });
+
+  assert.equal(result.data.itemCount, 1);
+  assert.equal(result.data.continuationToken, 'body-token');
+  assert.equal(result.meta.continuationToken, 'body-token');
+});
+
+test('listTickets normalizes body continuationToken into data and meta', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(200, {
+      items: [{ id: 't1', ticketNo: 1001 }],
+      continuationToken: 'ticket-body-token'
+    })
+  ], 0);
+
+  const result = await adapter.listTickets({
+    region: 'us',
+    limit: 50
+  });
+
+  assert.equal(result.data.itemCount, 1);
+  assert.equal(result.data.continuationToken, 'ticket-body-token');
+  assert.equal(result.meta.continuationToken, 'ticket-body-token');
+});
+
+function captureRequest (adapter) {
+  const captured = {};
+  const originalFetch = adapter.fetchImpl;
+  adapter.fetchImpl = async (url, init) => {
+    captured.url = url;
+    captured.init = init;
+    return originalFetch(url, init);
+  };
+  return captured;
+}
+
+test('getTags issues GET /tags with timezone and key query params', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.getTags({ region: 'us', timezone: '-5' });
+
+  assert.equal(captured.init.method, 'GET');
+  assert.ok(captured.url.pathname.endsWith('/tags'));
+  assert.equal(captured.url.searchParams.get('timezone'), '-5');
+  assert.equal(captured.url.searchParams.get('key'), 'secret-key');
+  assert.equal(Object.prototype.hasOwnProperty.call(captured.init.headers, 'Content-Type'), false);
+});
+
+test('getTicketAttachments issues GET /tickets/{ticketId}/attachments with encoded id', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.getTicketAttachments({ region: 'us', ticketId: 't 1', timezone: '-5' });
+
+  assert.equal(captured.init.method, 'GET');
+  assert.ok(captured.url.pathname.endsWith('/tickets/t%201/attachments'));
+  assert.equal(captured.url.searchParams.get('timezone'), '-5');
+});
+
+test('getActivityAttachments issues GET /tickets/activity/{activityId}/attachments', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.getActivityAttachments({ region: 'us', activityId: 'act-1', timezone: '-5' });
+
+  assert.equal(captured.init.method, 'GET');
+  assert.ok(captured.url.pathname.endsWith('/tickets/activity/act-1/attachments'));
+  assert.equal(captured.url.searchParams.get('timezone'), '-5');
+});
+
+test('addTicketAttachmentLinks POSTs attachments and defaults isPrivate to false', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [{ activityId: 'act-1' }] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addTicketAttachmentLinks({
+    region: 'us',
+    ticketId: 't-1',
+    timezone: '-5',
+    comment: 'see attached',
+    attachments: [{ src: 'https://example.test/a.png', caption: 'a' }],
+    user: { id: 'u1', name: 'User', email: 'user@example.com' }
+  });
+
+  assert.equal(captured.init.method, 'POST');
+  assert.ok(captured.url.pathname.endsWith('/tickets/t-1/attachments'));
+  assert.equal(captured.url.searchParams.get('timezone'), '-5');
+  assert.equal(captured.init.headers['Content-Type'], 'application/json');
+
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.comment, 'see attached');
+  assert.deepEqual(body.attachments, [{ src: 'https://example.test/a.png', caption: 'a' }]);
+  assert.equal(body.user.email, 'user@example.com');
+  assert.equal(body.isPrivate, false);
+});
+
+test('addTicketAttachmentLinks preserves explicit isPrivate=true', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addTicketAttachmentLinks({
+    region: 'us',
+    ticketId: 't-1',
+    attachments: [{ src: 'https://example.test/a.png' }],
+    user: { id: 'u1', name: 'User', email: 'user@example.com' },
+    isPrivate: true
+  });
+
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.isPrivate, true);
+});
+
+test('addComment includes isPrivate in body, defaulting to false', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { id: 'c1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addComment({
+    region: 'us',
+    ticketId: 't-1',
+    timezone: '-5',
+    comment: 'hello',
+    user: { id: 'u1', name: 'User', email: 'user@example.com' }
+  });
+
+  assert.equal(captured.init.method, 'POST');
+  assert.ok(captured.url.pathname.endsWith('/tickets/t-1/activities'));
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.comment, 'hello');
+  assert.equal(body.isPrivate, false);
+});
+
+test('addComment preserves explicit isPrivate=true', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { id: 'c1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addComment({
+    region: 'us',
+    ticketId: 't-1',
+    comment: 'internal note',
+    user: { id: 'u1', name: 'User', email: 'user@example.com' },
+    isPrivate: true
+  });
+
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.isPrivate, true);
+});
+
+test('request sends numeric timezone 0 (UTC) instead of dropping it as falsy', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.request({ region: 'us', method: 'GET', path: '/tickets', query: { timezone: 0 } });
+
+  assert.equal(captured.url.searchParams.get('timezone'), '0');
+});
+
+test('listTickets forwards statusId and include query params', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.listTickets({
+    region: 'us',
+    timezone: '-5',
+    statusId: 'In Progress',
+    include: 'description_HTML',
+    limit: 10
+  });
+
+  assert.equal(captured.url.searchParams.get('statusId'), 'In Progress');
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+  assert.equal(captured.url.searchParams.get('key'), 'secret-key');
+});
+
+test('getTicket forwards include=description_HTML', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { item: { id: 't1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.getTicket({
+    region: 'us',
+    ticketId: 't1',
+    timezone: '-5',
+    include: 'description_HTML'
+  });
+
+  assert.ok(captured.url.pathname.endsWith('/tickets/t1'));
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+});
+
+test('getTicketActivities forwards include=comment_HTML and limit', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(200, { items: [] })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.getTicketActivities({
+    region: 'us',
+    ticketId: 't1',
+    timezone: '-5',
+    include: 'comment_HTML',
+    limit: 25
+  });
+
+  assert.ok(captured.url.pathname.endsWith('/tickets/t1/activities'));
+  assert.equal(captured.url.searchParams.get('include'), 'comment_HTML');
+  assert.equal(captured.url.searchParams.get('limit'), '25');
+});
+
+test('createTicket and updateTicket forward include=description_HTML', async () => {
+  const { adapter } = createAdapterWithQueue([
+    createJsonResponse(201, { item: { id: 't1' } }),
+    createJsonResponse(200, { item: { id: 't1' } })
+  ], 0);
+  const captured = captureRequest(adapter);
+  const user = { id: 'u1', name: 'User', email: 'user@example.com' };
+
+  await adapter.createTicket({
+    region: 'us',
+    timezone: '-5',
+    include: 'description_HTML',
+    ticket: { title: 'Laptop request', requestor: user },
+    user
+  });
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+  assert.equal(captured.init.method, 'POST');
+
+  await adapter.updateTicket({
+    region: 'us',
+    ticketId: 't1',
+    timezone: '-5',
+    include: 'description_HTML',
+    ticket: { title: 'Updated title' },
+    user
+  });
+  assert.equal(captured.url.searchParams.get('include'), 'description_HTML');
+  assert.equal(captured.init.method, 'PUT');
+});
+
+test('addComment forwards include=comment_HTML and comment_HTML body', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { id: 'c1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addComment({
+    region: 'us',
+    ticketId: 't-1',
+    timezone: '-5',
+    include: 'comment_HTML',
+    comment: 'hello',
+    comment_HTML: '<p>hello</p>',
+    user: { id: 'u1', name: 'User', email: 'user@example.com' },
+    isPrivate: true
+  });
+
+  assert.equal(captured.url.searchParams.get('include'), 'comment_HTML');
+  const body = JSON.parse(captured.init.body);
+  assert.equal(body.comment, 'hello');
+  assert.equal(body.comment_HTML, '<p>hello</p>');
+  assert.equal(body.isPrivate, true);
+});
+
+test('addTicketAttachmentLinks forwards include=comment_HTML', async () => {
+  const { adapter } = createAdapterWithQueue([createJsonResponse(201, { item: { activityId: 'act-1' } })], 0);
+  const captured = captureRequest(adapter);
+
+  await adapter.addTicketAttachmentLinks({
+    region: 'us',
+    ticketId: 't-1',
+    timezone: '-5',
+    include: 'comment_HTML',
+    comment: 'see attached',
+    attachments: [{ src: 'https://example.test/a.png', caption: 'a' }],
+    user: { id: 'u1', name: 'User', email: 'user@example.com' }
+  });
+
+  assert.equal(captured.url.searchParams.get('include'), 'comment_HTML');
 });
